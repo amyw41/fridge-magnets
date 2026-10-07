@@ -1,7 +1,7 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import { useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { DOOR_Z, FRIDGE } from './Fridge'
+import { DOOR_Z, MAGNET_AREA } from './Fridge'
 
 export type MagnetShape = 'circle' | 'square' | 'star' | 'heart'
 
@@ -86,11 +86,10 @@ export default function Magnet({
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     if (!dragging) return
     if (!e.ray.intersectPlane(doorPlane, hit)) return
-    const halfW = FRIDGE.width / 2 - 0.25
-    const halfH = FRIDGE.height / 2 - 0.25
+    // Stay on the flat front; the rounded edges curve away from the door plane
     target.current.set(
-      THREE.MathUtils.clamp(hit.x + offset.current.x, -halfW, halfW),
-      THREE.MathUtils.clamp(hit.y + offset.current.y, -halfH, halfH),
+      THREE.MathUtils.clamp(hit.x + offset.current.x, MAGNET_AREA.minX, MAGNET_AREA.maxX),
+      THREE.MathUtils.clamp(hit.y + offset.current.y, MAGNET_AREA.minY, MAGNET_AREA.maxY),
       DOOR_Z,
     )
   }

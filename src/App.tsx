@@ -1,16 +1,19 @@
 import { Canvas } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
+import { ContactShadows, OrbitControls } from '@react-three/drei'
 import { useState } from 'react'
 import CameraRig, { HOME_POSITION } from './components/CameraRig'
 import Fridge from './components/Fridge'
 import Magnet, { type MagnetData } from './components/Magnet'
+import Studio from './components/Studio'
+import { FRIDGE_STYLE } from './fridgeStyle'
 
+// Starting spots keep clear of the handles on the left near the door seam
 const initialMagnets: MagnetData[] = [
-  { id: 1, shape: 'circle', color: '#ff5d73', position: [-0.5, 1.2] },
-  { id: 2, shape: 'star', color: '#ffc93c', position: [0.4, 0.9] },
-  { id: 3, shape: 'heart', color: '#ff8fab', position: [-0.2, 0.4] },
-  { id: 4, shape: 'square', color: '#4cc9f0', position: [0.5, -0.2] },
-  { id: 5, shape: 'circle', color: '#7bd389', position: [-0.6, -0.5] },
+  { id: 1, shape: 'star', color: '#ffc93c', position: [0.25, 1.15] },
+  { id: 2, shape: 'circle', color: '#ff5d73', position: [0.3, 0.4] },
+  { id: 3, shape: 'heart', color: '#ff8fab', position: [-0.25, -0.05] },
+  { id: 4, shape: 'square', color: '#4cc9f0', position: [0.3, -0.6] },
+  { id: 5, shape: 'circle', color: '#7bd389', position: [-0.3, -1.1] },
 ]
 
 export default function App() {
@@ -21,8 +24,8 @@ export default function App() {
   return (
     <>
       <Canvas shadows camera={{ position: HOME_POSITION.toArray(), fov: 40 }} dpr={[1, 2]}>
-        <color attach="background" args={['#f3ece2']} />
-        <ambientLight intensity={0.4} />
+        <color attach="background" args={[FRIDGE_STYLE.scene.background]} />
+        <ambientLight intensity={0.25} />
         <directionalLight
           position={[3, 5, 4]}
           intensity={1.2}
@@ -31,7 +34,7 @@ export default function App() {
         />
         {/* Soft fill so the back isn't lit by the environment alone */}
         <directionalLight position={[-3, 4, -5]} intensity={0.5} />
-        <Environment preset="apartment" />
+        <Studio />
 
         <Fridge />
         {initialMagnets.map((m) => (
@@ -46,7 +49,7 @@ export default function App() {
           enableZoom={!gliding}
           enablePan={false}
           minDistance={3}
-          maxDistance={9}
+          maxDistance={11}
           minPolarAngle={Math.PI / 4}
           maxPolarAngle={Math.PI / 1.8}
         />
