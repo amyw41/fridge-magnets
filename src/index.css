@@ -14,6 +14,19 @@ body {
 }
 .hud h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .hud p { font-size: 13px; opacity: 0.6; margin-top: 4px; }
+.dev-stats {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(30, 24, 26, 0.75);
+  color: #e8f5e9;
+  font: 11px/1.5 ui-monospace, Consolas, monospace;
+  white-space: pre;
+  pointer-events: none;
+  z-index: 10;
+}
 .reset-btn {
   position: absolute;
   bottom: 24px;

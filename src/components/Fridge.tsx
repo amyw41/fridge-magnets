@@ -21,7 +21,7 @@ const DOME = 0.12
 /** Height of the seam between freezer (above) and main door (below) */
 const SEAM_Y = 0.95
 
-/** Flat part of the front face, where magnets can sit (before their own margin) */
+/** Flat part of the front (the door faces). Magnets must sit fully inside it. */
 export const FRONT_FLAT = {
   minX: -HX + R_PLAN,
   maxX: HX - R_PLAN,
@@ -29,15 +29,39 @@ export const FRONT_FLAT = {
   maxY: HY - R_TOP,
 }
 
-const DIAL_Y = FRONT_FLAT.maxY - 0.14
-
-/** Where magnet centres may go: the flat front, inset by a magnet's size, below the dials */
-export const MAGNET_AREA = {
-  minX: FRONT_FLAT.minX + 0.22,
-  maxX: FRONT_FLAT.maxX - 0.22,
-  minY: FRONT_FLAT.minY + 0.22,
-  maxY: DIAL_Y - 0.3,
+/** Box enclosing everything solid, including handles in front and coils behind */
+export const FRIDGE_BOUNDS = {
+  min: new THREE.Vector3(-HX, -HY, BACK_Z - 0.12),
+  max: new THREE.Vector3(HX, HY + DOME, DOOR_Z + 0.13),
 }
+export const FLOOR_Y = -HY
+
+// Door hardware layout
+const DIAL_Y = FRONT_FLAT.maxY - 0.14
+const DIAL_RADIUS = 0.06
+const DIAL_XS = [-2, -1, 0, 1, 2].map((i) => i * 0.26)
+const HANDLE_LENGTH = 0.42
+const HANDLE_RADIUS = 0.032
+const HANDLE_X = FRONT_FLAT.minX + 0.3
+const HANDLE_YS = [SEAM_Y + 0.25, SEAM_Y - 0.3]
+
+/** Things on the front a magnet can't overlap, in door-plane (x, y) coordinates */
+export type Obstacle =
+  | { kind: 'rect'; x: number; y: number; hw: number; hh: number }
+  | { kind: 'circle'; x: number; y: number; r: number }
+
+export const OBSTACLES: Obstacle[] = [
+  // The gap between freezer and main door
+  { kind: 'rect', x: 0, y: SEAM_Y, hw: HX, hh: 0.008 },
+  ...HANDLE_YS.map((y): Obstacle => ({
+    kind: 'rect',
+    x: HANDLE_X,
+    y,
+    hw: HANDLE_LENGTH / 2 + HANDLE_RADIUS,
+    hh: HANDLE_RADIUS,
+  })),
+  ...DIAL_XS.map((x): Obstacle => ({ kind: 'circle', x, y: DIAL_Y, r: DIAL_RADIUS })),
+]
 
 // Condenser coil layout (local to the coil group), sized to the flat back
 const COIL_ROWS = 14
@@ -181,12 +205,12 @@ function makeLabelTexture() {
 
 /** Short horizontal chrome bar on two standoff posts. */
 function Handle({ position, material }: { position: [number, number, number]; material: THREE.Material }) {
-  const length = 0.42
+  const length = HANDLE_LENGTH
   const standoff = 0.09
   return (
     <group position={position}>
       <mesh position={[0, 0, standoff]} rotation={[0, 0, Math.PI / 2]} material={material} castShadow>
-        <capsuleGeometry args={[0.032, length, 8, 24]} />
+        <capsuleGeometry args={[HANDLE_RADIUS, length, 8, 24]} />
       </mesh>
       {[-1, 1].map((s) => (
         <mesh
@@ -261,7 +285,6 @@ export default function Fridge() {
   const bodyGeometry = useMemo(makeBodyGeometry, [])
   const seamGeometry = useMemo(makeSeamGeometry, [])
   const chrome = useMemo(() => new THREE.MeshStandardMaterial(S.chrome), [])
-  const handleX = FRONT_FLAT.minX + 0.3
 
   return (
     <group>
@@ -276,19 +299,14 @@ export default function Fridge() {
       </mesh>
 
       {/* Handles: left side of each door, close to the seam */}
-      <Handle position={[handleX, SEAM_Y + 0.25, DOOR_Z]} material={chrome} />
-      <Handle position={[handleX, SEAM_Y - 0.3, DOOR_Z]} material={chrome} />
+      {HANDLE_YS.map((y) => (
+        <Handle key={y} position={[HANDLE_X, y, DOOR_Z]} material={chrome} />
+      ))}
 
       {/* Five dial bumps along the top front */}
-      {[-2, -1, 0, 1, 2].map((i) => (
-        <mesh
-          key={i}
-          position={[i * 0.26, DIAL_Y, DOOR_Z]}
-          scale={[1, 1, 0.55]}
-          material={chrome}
-          castShadow
-        >
-          <sphereGeometry args={[0.06, 32, 16]} />
+      {DIAL_XS.map((x) => (
+        <mesh key={x} position={[x, DIAL_Y, DOOR_Z]} scale={[1, 1, 0.55]} material={chrome} castShadow>
+          <sphereGeometry args={[DIAL_RADIUS, 32, 16]} />
         </mesh>
       ))}
 

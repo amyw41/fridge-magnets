@@ -1,11 +1,14 @@
 import { Canvas } from '@react-three/fiber'
 import { ContactShadows, OrbitControls } from '@react-three/drei'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import CameraRig, { HOME_POSITION } from './components/CameraRig'
 import Fridge from './components/Fridge'
-import Magnet, { type MagnetData } from './components/Magnet'
+import Magnet from './components/Magnet'
+import StaticShadows from './components/StaticShadows'
 import Studio from './components/Studio'
-import { FRIDGE_STYLE } from './fridgeStyle'
+import WheelNavigation from './components/WheelNavigation'
+import { CAMERA_CONFIG, FRIDGE_STYLE } from './fridgeStyle'
+import { resolveDrop, type MagnetData } from './magnetLayout'
 
 // Starting spots keep clear of the handles on the left near the door seam
 const initialMagnets: MagnetData[] = [
@@ -17,13 +20,28 @@ const initialMagnets: MagnetData[] = [
 ]
 
 export default function App() {
+  const [magnets, setMagnets] = useState(initialMagnets)
   const [dragging, setDragging] = useState(false)
   const [gliding, setGliding] = useState(false)
-  const [resetSignal, setResetSignal] = useState(0)
+
+  // Settle a dropped magnet: keep it, nudge it to the nearest free spot, or
+  // (dropped off the door / nowhere free) leave its old position so it slides back
+  const handleDrop = useCallback((id: number, x: number, y: number) => {
+    setMagnets((ms) => {
+      const me = ms.find((m) => m.id === id)!
+      const spot = resolveDrop({ x, y }, me.shape, ms.filter((m) => m.id !== id))
+      return spot ? ms.map((m) => (m.id === id ? { ...m, position: spot } : m)) : ms
+    })
+  }, [])
 
   return (
     <>
-      <Canvas shadows camera={{ position: HOME_POSITION.toArray(), fov: 40 }} dpr={[1, 2]}>
+      <Canvas
+        shadows
+        camera={{ position: HOME_POSITION.toArray(), fov: 40, near: 0.05 }}
+        dpr={[1, 2]}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         <color attach="background" args={[FRIDGE_STYLE.scene.background]} />
         <ambientLight intensity={0.25} />
         <directionalLight
@@ -37,31 +55,31 @@ export default function App() {
         <Studio />
 
         <Fridge />
-        {initialMagnets.map((m) => (
-          <Magnet key={m.id} data={m} onDragChange={setDragging} />
+        {magnets.map((m) => (
+          <Magnet key={m.id} data={m} onDragChange={setDragging} onDrop={handleDrop} />
         ))}
 
-        <ContactShadows position={[0, -2.2, 0]} opacity={0.4} scale={8} blur={2.5} />
+        {/* Floor shadow is baked on the first frame: only the static fridge reaches the floor */}
+        <ContactShadows position={[0, -2.2, 0]} opacity={0.4} scale={8} blur={2.5} frames={1} />
+        <StaticShadows />
         <OrbitControls
           makeDefault
           enabled={!dragging}
           enableRotate={!gliding}
-          enableZoom={!gliding}
-          enablePan={false}
-          minDistance={3}
-          maxDistance={11}
-          minPolarAngle={Math.PI / 4}
-          maxPolarAngle={Math.PI / 1.8}
+          enablePan={!gliding}
+          enableZoom={false} // replaced by WheelNavigation
+          minDistance={CAMERA_CONFIG.minDistance}
+          maxDistance={CAMERA_CONFIG.maxDistance}
+          minPolarAngle={CAMERA_CONFIG.minPolarAngle}
+          maxPolarAngle={CAMERA_CONFIG.maxPolarAngle}
         />
-        <CameraRig resetSignal={resetSignal} onGlideChange={setGliding} />
+        <WheelNavigation disabled={gliding} />
+        <CameraRig resetSignal={0} onGlideChange={setGliding} />
       </Canvas>
       <div className="hud">
         <h1>Fridge Magnets</h1>
-        <p>Drag magnets around · drag the background to orbit 360°</p>
+        <p>Drag magnets around · drag to orbit · scroll or pinch to zoom · two-finger scroll, right-drag or Space+drag to pan</p>
       </div>
-      <button className="reset-btn" onClick={() => setResetSignal((n) => n + 1)} disabled={gliding}>
-        Reset view
-      </button>
     </>
   )
 }
