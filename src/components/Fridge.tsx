@@ -1,9 +1,20 @@
 import { RoundedBox } from '@react-three/drei'
-import type { ThreeEvent } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { FRIDGE_STYLE as S } from '../fridgeStyle'
+import {
+  bodyMaterial,
+  finishFor,
+  fridgeModel,
+  HANDLE_RADIUS,
+  type FridgeLook,
+  type FridgeModel,
+  type Corners,
+  type FridgeRounding,
+  type HandleSpec,
+} from '../fridgeModels'
 
 export const FRIDGE = { width: 2, height: 4.4, depth: 1.4 }
 export const DOOR_Z = FRIDGE.depth / 2
@@ -11,15 +22,15 @@ const BACK_Z = -DOOR_Z
 const HX = FRIDGE.width / 2
 const HY = FRIDGE.height / 2
 
-// Body rounding: plan-view corner radius, vertical shoulder radii, and extra
-// height the top bulges up by in the middle
+// The roundest body's rounding (the retro model). Door space for magnets and
+// notes is worked out from it, so it fits every model.
 const R_PLAN = 0.3
 const R_TOP = 0.5
 const R_BOTTOM = 0.2
 const DOME = 0.12
 
 /** Height of the seam between freezer (above) and main door (below) */
-const SEAM_Y = 0.95
+export const SEAM_Y = 0.95
 
 /** Flat part of the front (the door faces). Magnets must sit fully inside it. */
 export const FRONT_FLAT = {
@@ -29,39 +40,32 @@ export const FRONT_FLAT = {
   maxY: HY - R_TOP,
 }
 
-/** Box enclosing everything solid, including handles in front and coils behind */
+/**
+ * Box enclosing everything solid, including handles in front and coils
+ * behind. It follows the fridge on screen (see setFridgeBounds), so the
+ * camera limits fit a big French door and a mini fridge alike.
+ */
 export const FRIDGE_BOUNDS = {
   min: new THREE.Vector3(-HX, -HY, BACK_Z - 0.12),
   max: new THREE.Vector3(HX, HY + DOME, DOOR_Z + 0.13),
 }
 export const FLOOR_Y = -HY
 
-// Door hardware layout
-const DIAL_Y = FRONT_FLAT.maxY - 0.14
-const DIAL_RADIUS = 0.06
-const DIAL_XS = [-2, -1, 0, 1, 2].map((i) => i * 0.26)
-const HANDLE_LENGTH = 0.42
-const HANDLE_RADIUS = 0.032
-const HANDLE_X = FRONT_FLAT.minX + 0.3
-const HANDLE_YS = [SEAM_Y + 0.25, SEAM_Y - 0.3]
+/**
+ * Where the front view frames the fridge: its middle height, and how much
+ * further back than for the retro (bigger fridges only; a small one is left
+ * looking small).
+ */
+export const FRIDGE_HOME = { y: 0, distance: 1 }
 
-/** Things on the front a magnet can't overlap, in door-plane (x, y) coordinates */
-export type Obstacle =
-  | { kind: 'rect'; x: number; y: number; hw: number; hh: number }
-  | { kind: 'circle'; x: number; y: number; r: number }
-
-export const OBSTACLES: Obstacle[] = [
-  // The gap between freezer and main door
-  { kind: 'rect', x: 0, y: SEAM_Y, hw: HX, hh: 0.008 },
-  ...HANDLE_YS.map((y): Obstacle => ({
-    kind: 'rect',
-    x: HANDLE_X,
-    y,
-    hw: HANDLE_LENGTH / 2 + HANDLE_RADIUS,
-    hh: HANDLE_RADIUS,
-  })),
-  ...DIAL_XS.map((x): Obstacle => ({ kind: 'circle', x, y: DIAL_Y, r: DIAL_RADIUS })),
-]
+/** Resize FRIDGE_BOUNDS to a model; every model stands on the floor with its doors at DOOR_Z */
+export function setFridgeBounds(model: FridgeModel) {
+  const { w, h, d } = model.size
+  FRIDGE_HOME.y = (h - FRIDGE.height) / 2
+  FRIDGE_HOME.distance = Math.max(1, h / FRIDGE.height)
+  FRIDGE_BOUNDS.min.set(-w / 2, FLOOR_Y, DOOR_Z - d - 0.12)
+  FRIDGE_BOUNDS.max.set(w / 2, FLOOR_Y + h + model.rounding.dome, DOOR_Z + 0.13)
+}
 
 // Condenser coil layout (local to the coil group), sized to the flat back
 const COIL_ROWS = 14
@@ -83,7 +87,8 @@ const clamp = THREE.MathUtils.clamp
  * elliptically-rounded box (big soft shoulders on top, tighter at the base),
  * then the top is bulged upward into a gentle dome.
  */
-function makeBodyGeometry() {
+function makeBodyGeometry(r: FridgeRounding) {
+  const { plan: R_PLAN, top: R_TOP, bottom: R_BOTTOM, dome: DOME } = r
   const { width, height, depth } = FRIDGE
   const hz = depth / 2
   const box = new THREE.BoxGeometry(width, height, depth, 48, 96, 36)
@@ -130,7 +135,7 @@ function quarterArc(a: THREE.Vector3, corner: THREE.Vector3, b: THREE.Vector3) {
 }
 
 /** Dark seam tube following the front and front corners at SEAM_Y. */
-function makeSeamGeometry() {
+function makeSeamGeometry(R_PLAN: number) {
   const y = SEAM_Y
   const z = DOOR_Z
   const x = HX - R_PLAN
@@ -203,12 +208,20 @@ function makeLabelTexture() {
   return tex
 }
 
-/** Short horizontal chrome bar on two standoff posts. */
-function Handle({ position, material }: { position: [number, number, number]; material: THREE.Material }) {
-  const length = HANDLE_LENGTH
+/** Bar handle on two standoff posts, horizontal or vertical. */
+function Handle({ spec, material }: { spec: HandleSpec; material: THREE.Material }) {
+  const { length } = spec
   const standoff = 0.09
+  if (material.name === 'grip') {
+    // flat dark grip strip tucked in the gap between doors
+    return (
+      <mesh position={[spec.x, spec.y, DOOR_Z - 0.015]} rotation={[0, 0, spec.dir === 'v' ? Math.PI / 2 : 0]} material={material}>
+        <boxGeometry args={[length, 0.05, 0.05]} />
+      </mesh>
+    )
+  }
   return (
-    <group position={position}>
+    <group position={[spec.x, spec.y, DOOR_Z]} rotation={[0, 0, spec.dir === 'v' ? Math.PI / 2 : 0]}>
       <mesh position={[0, 0, standoff]} rotation={[0, 0, Math.PI / 2]} material={material} castShadow>
         <capsuleGeometry args={[HANDLE_RADIUS, length, 8, 24]} />
       </mesh>
@@ -227,7 +240,126 @@ function Handle({ position, material }: { position: [number, number, number]; ma
   )
 }
 
-function Back() {
+const DOOR_DEPTH = 0.08
+const CABINET_FRONT = DOOR_DEPTH + 0.004 // how far the cabinet front sits behind the door faces
+
+/** Front-view rounded rectangle, centred on 0, with its own radius per corner */
+function roundedRect(w: number, h: number, [tl, tr, br, bl]: Corners) {
+  const x0 = -w / 2
+  const x1 = w / 2
+  const y0 = -h / 2
+  const y1 = h / 2
+  const r = (c: number) => Math.max(c, 0.0005)
+  const s = new THREE.Shape()
+  s.moveTo(x0 + r(bl), y0)
+  s.lineTo(x1 - r(br), y0)
+  s.absarc(x1 - r(br), y0 + r(br), r(br), -Math.PI / 2, 0, false)
+  s.lineTo(x1, y1 - r(tr))
+  s.absarc(x1 - r(tr), y1 - r(tr), r(tr), 0, Math.PI / 2, false)
+  s.lineTo(x0 + r(tl), y1)
+  s.absarc(x0 + r(tl), y1 - r(tl), r(tl), Math.PI / 2, Math.PI, false)
+  s.lineTo(x0, y0 + r(bl))
+  s.absarc(x0 + r(bl), y0 + r(bl), r(bl), Math.PI, (Math.PI * 3) / 2, false)
+  return s
+}
+
+/** A slab with rounded front corners and softly bevelled edges, centred on 0 */
+function makeSlab(w: number, h: number, depth: number, corners: Corners, bevel: number) {
+  const inset = corners.map((c) => Math.max(c - bevel, 0)) as Corners
+  const g = new THREE.ExtrudeGeometry(roundedRect(w - bevel * 2, h - bevel * 2, inset), {
+    depth: depth - bevel * 2,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 4,
+    curveSegments: 20,
+  })
+  g.translate(0, 0, -(depth - bevel * 2) / 2)
+  return g
+}
+
+const SQUARE: Corners = [0.02, 0.02, 0.02, 0.02]
+
+/**
+ * Modern fridge: a cabinet with separate door slabs standing proud of it, so
+ * the gaps between doors read as real dark shadow lines. Corner rounding
+ * comes from the model, from crisp to bubbly.
+ */
+function DoorBody({
+  model,
+  doorMaterial,
+  events,
+}: {
+  model: FridgeModel
+  doorMaterial: THREE.Material
+  events: Record<string, (e: ThreeEvent<MouseEvent> & ThreeEvent<PointerEvent>) => void>
+}) {
+  const { w: width, h: height, d: depth } = model.size
+  const backZ = DOOR_Z - depth
+  const floor = FLOOR_Y
+  const kick = 0.12 // recessed toe-kick at the floor
+  const cabH = height - kick
+  const cabD = depth - CABINET_FRONT
+  const cabCorners = model.cabinetCorners ?? SQUARE
+  const cabinet = useMemo(() => makeSlab(width, cabH, cabD, cabCorners, 0.02), [width, cabH, cabD, cabCorners])
+  const backer = useMemo(
+    () => new THREE.ShapeGeometry(roundedRect(width - 0.03, cabH - 0.03, cabCorners.map((c) => Math.max(c - 0.015, 0)) as Corners), 20),
+    [width, cabH, cabCorners],
+  )
+  const doors = useMemo(
+    () => model.doors.map((d) => makeSlab(d.x1 - d.x0, d.y1 - d.y0, DOOR_DEPTH, d.corners ?? SQUARE, 0.012)),
+    [model.doors],
+  )
+  const kickWidth = width - 0.08 - Math.max(cabCorners[2], cabCorners[3]) * 1.4
+
+  return (
+    <group>
+      {/* Cabinet */}
+      <mesh
+        geometry={cabinet}
+        position={[0, floor + kick + cabH / 2, backZ + cabD / 2]}
+        material={doorMaterial}
+        castShadow
+        receiveShadow
+        {...events}
+      />
+      {/* Dark face behind the doors: what you see down the gaps */}
+      <mesh geometry={backer} position={[0, floor + kick + cabH / 2, backZ + cabD + 0.001]}>
+        <meshStandardMaterial color="#0e0e10" roughness={0.9} />
+      </mesh>
+      {/* Toe-kick */}
+      <mesh position={[0, floor + kick / 2, backZ + cabD / 2 - 0.06]}>
+        <boxGeometry args={[kickWidth, kick, cabD - 0.12]} />
+        <meshStandardMaterial color="#141416" roughness={0.8} />
+      </mesh>
+      {/* Doors */}
+      {model.doors.map((d, i) => (
+        <mesh
+          key={i}
+          geometry={doors[i]}
+          position={[(d.x0 + d.x1) / 2, (d.y0 + d.y1) / 2, DOOR_Z - DOOR_DEPTH / 2]}
+          material={doorMaterial}
+          castShadow
+          receiveShadow
+          {...events}
+        />
+      ))}
+    </group>
+  )
+}
+
+/** The retro's back, stretched to fit the fridge's size and pushed out to its back */
+function Back({ size }: { size: FridgeModel['size'] }) {
+  return (
+    <group position={[0, FLOOR_Y, DOOR_Z - size.d - BACK_Z]} scale={[size.w / FRIDGE.width, size.h / FRIDGE.height, 1]}>
+      <group position={[0, -FLOOR_Y, 0]}>
+        <BackParts />
+      </group>
+    </group>
+  )
+}
+
+function BackParts() {
   const coilGeometry = useMemo(makeCoilGeometry, [])
   const labelTexture = useMemo(makeLabelTexture, [])
   const wireGeometry = useMemo(
@@ -281,36 +413,83 @@ function Back() {
   )
 }
 
-export default function Fridge() {
-  const bodyGeometry = useMemo(makeBodyGeometry, [])
-  const seamGeometry = useMemo(makeSeamGeometry, [])
+export default function Fridge({ look, onOpenMenu, preview = false }: {
+  look: FridgeLook
+  /** Clicked (not dragged) on a bare spot of the body */
+  onOpenMenu?: (clientX: number, clientY: number) => void
+  /** A still picture for the fridge menu: leaves the real scene's camera limits and shadows alone */
+  preview?: boolean
+}) {
+  const model = fridgeModel(look.model)
+  useLayoutEffect(() => {
+    if (!preview) setFridgeBounds(model)
+  }, [model, preview])
+  const bodyGeometry = useMemo(() => makeBodyGeometry(model.rounding), [model])
+  const seamGeometry = useMemo(() => makeSeamGeometry(model.rounding.plan), [model])
   const chrome = useMemo(() => new THREE.MeshStandardMaterial(S.chrome), [])
+  // Shadows are drawn once (StaticShadows), so redraw them whenever the fridge
+  // itself is rebuilt, e.g. after an edit reloads it, or old shadows linger
+  const gl = useThree((s) => s.gl)
+  useEffect(() => {
+    if (!preview) gl.shadowMap.needsUpdate = true
+  }, [gl, model, chrome, preview])
+
+  // One shared paint material for the body (or doors); it fades to a newly
+  // picked colour instead of snapping
+  const bodyMat = useMemo(() => new THREE.MeshPhysicalMaterial({ color: look.color }), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const finish = finishFor(look.color)
+  useEffect(() => {
+    bodyMat.setValues(bodyMaterial(finish))
+    bodyMat.needsUpdate = true
+  }, [bodyMat, finish])
+  const target = useMemo(() => new THREE.Color(), [])
+  useFrame((_, dt) => {
+    if (preview) return
+    target.set(look.color)
+    bodyMat.color.lerp(target, 1 - Math.exp(-dt * 10))
+  })
+  // previews only draw on demand, so they take the colour straight away
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    if (!preview) return
+    bodyMat.color.set(look.color)
+    invalidate()
+  }, [preview, look.color, bodyMat, invalidate])
+  const brushed = useMemo(() => new THREE.MeshStandardMaterial({ color: '#e9eaec', metalness: 1, roughness: 0.22 }), [])
+  const grip = useMemo(() => new THREE.MeshStandardMaterial({ name: 'grip', color: '#141416', roughness: 0.55 }), [])
+  const handleMaterial = { chrome, brushed, dark: grip }[model.handleFinish]
+
+  const events = {
+    onPointerDown: block,
+    onPointerOver: block,
+    onClick: (e: ThreeEvent<MouseEvent>) => {
+      // a click, not the end of an orbit drag, and not on a magnet or note in front
+      if (e.delta > 4 || e.intersections[0]?.object !== e.eventObject) return
+      e.stopPropagation()
+      onOpenMenu?.(e.nativeEvent.clientX, e.nativeEvent.clientY)
+    },
+  }
 
   return (
     <group>
-      {/* Body */}
-      <mesh geometry={bodyGeometry} castShadow receiveShadow onPointerDown={block} onPointerOver={block}>
-        <meshPhysicalMaterial {...S.body} />
-      </mesh>
+      {model.body === 'rounded' ? (
+        <>
+          {/* Moulded retro body */}
+          <mesh geometry={bodyGeometry} material={bodyMat} castShadow receiveShadow {...events} />
+          {/* Freezer / main door seam */}
+          <mesh geometry={seamGeometry}>
+            <meshStandardMaterial {...S.seam} />
+          </mesh>
+        </>
+      ) : (
+        <DoorBody model={model} doorMaterial={bodyMat} events={events as never} />
+      )}
 
-      {/* Freezer / main door seam */}
-      <mesh geometry={seamGeometry}>
-        <meshStandardMaterial {...S.seam} />
-      </mesh>
-
-      {/* Handles: left side of each door, close to the seam */}
-      {HANDLE_YS.map((y) => (
-        <Handle key={y} position={[HANDLE_X, y, DOOR_Z]} material={chrome} />
+      {model.handles.map((h, i) => (
+        <Handle key={`${model.id}-${i}`} spec={h} material={handleMaterial} />
       ))}
 
-      {/* Five dial bumps along the top front */}
-      {DIAL_XS.map((x) => (
-        <mesh key={x} position={[x, DIAL_Y, DOOR_Z]} scale={[1, 1, 0.55]} material={chrome} castShadow>
-          <sphereGeometry args={[DIAL_RADIUS, 32, 16]} />
-        </mesh>
-      ))}
-
-      <Back />
+      <Back size={model.size} />
     </group>
   )
 }

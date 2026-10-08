@@ -1,28 +1,218 @@
-import { Canvas } from '@react-three/fiber'
-import { ContactShadows, OrbitControls } from '@react-three/drei'
-import { useCallback, useState } from 'react'
-import CameraRig, { HOME_POSITION } from './components/CameraRig'
-import Fridge from './components/Fridge'
+import { Canvas, useFrame, type RootState } from '@react-three/fiber'
+import { ContactShadows, OrbitControls, PerformanceMonitor } from '@react-three/drei'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import CameraRig, { INTRO_POSITION } from './components/CameraRig'
+import * as THREE from 'three'
+import Fridge, { DOOR_Z } from './components/Fridge'
+import FridgeMenu from './components/FridgeMenu'
+import GlossyFloor from './components/GlossyFloor'
+import LoaderStar from './components/LoaderStar'
 import Magnet from './components/Magnet'
+import PaperNote, { type PaperData } from './components/PaperNote'
 import StaticShadows from './components/StaticShadows'
 import Studio from './components/Studio'
+import ToolMenu, { type MagnetPreset } from './components/ToolMenu'
 import WheelNavigation from './components/WheelNavigation'
-import { CAMERA_CONFIG, FRIDGE_STYLE } from './fridgeStyle'
+import { CAMERA_CONFIG, FRIDGE_STYLE, LOAD_IN } from './fridgeStyle'
+import { layoutIntro, type IntroPose } from './introLayout'
+import { placePaper, type PaperKind } from './papers'
+import { DEFAULT_LOOK, doorCentre, setDoorFront, type FridgeLook } from './fridgeModels'
 import { resolveDrop, type MagnetData } from './magnetLayout'
 
 // Starting spots keep clear of the handles on the left near the door seam
 const initialMagnets: MagnetData[] = [
-  { id: 1, shape: 'star', color: '#ffc93c', position: [0.25, 1.15] },
-  { id: 2, shape: 'circle', color: '#ff5d73', position: [0.3, 0.4] },
-  { id: 3, shape: 'heart', color: '#ff8fab', position: [-0.25, -0.05] },
-  { id: 4, shape: 'square', color: '#4cc9f0', position: [0.3, -0.6] },
-  { id: 5, shape: 'circle', color: '#7bd389', position: [-0.3, -1.1] },
+  { id: 1, shape: 'star', color: '#ffffff', finish: 'chrome', position: [0.25, 1.15] },
+  { id: 2, shape: 'circle', color: '#fbfaf6', finish: 'plastic', position: [0.3, 0.4] },
+  { id: 3, shape: 'star', color: '#ffffff', finish: 'chrome', position: [-0.25, -0.05] },
+  { id: 4, shape: 'star', color: '#ffffff', finish: 'chrome', position: [0.3, -0.6] },
+  { id: 5, shape: 'circle', color: '#fbfaf6', finish: 'plastic', position: [-0.3, -1.1] },
 ]
+
+/** Reports once the scene has actually been drawn a couple of times (environment and shadows included). */
+function SceneDrawn({ onDrawn }: { onDrawn: () => void }) {
+  const frames = useRef(0)
+  useFrame(() => {
+    if (++frames.current === 3) onDrawn()
+  })
+  return null
+}
 
 export default function App() {
   const [magnets, setMagnets] = useState(initialMagnets)
+  const [papers, setPapers] = useState<PaperData[]>([])
+  // The fridge itself: which model and colour, and where its pop-up menu is open
+  const [look, setLook] = useState<FridgeLook>(DEFAULT_LOOK)
+  const [fridgeMenuAt, setFridgeMenuAt] = useState<{ x: number; y: number } | null>(null)
+  const openFridgeMenu = useCallback((x: number, y: number) => setFridgeMenuAt({ x, y }), [])
+  const closeFridgeMenu = useCallback(() => setFridgeMenuAt(null), [])
   const [dragging, setDragging] = useState(false)
   const [gliding, setGliding] = useState(false)
+  // Lighter drawing for slower computers: switched on automatically when the
+  // frame rate drops (or forced with ?quality=low / ?quality=high in the URL)
+  const [lowPower, setLowPower] = useState(() => new URLSearchParams(location.search).get('quality') === 'low')
+  const forcedQuality = new URLSearchParams(location.search).has('quality')
+  // The glide in from the title screen: the sidebar waits for it. Later glides
+  // (switching fridge) leave the sidebar where it is.
+  const [entering, setEntering] = useState(false)
+  const onGlideChange = useCallback((g: boolean) => {
+    setGliding(g)
+    if (!g) setEntering(false)
+  }, [])
+  // Landing screen: close-up of the fridge with the title. Any click, scroll or
+  // swipe pulls back to the full fridge (a reset glide from the intro shot).
+  const [intro, setIntro] = useState(true)
+  const [resetSignal, setResetSignal] = useState(0)
+  const introRef = useRef(true)
+  const readyRef = useRef(false) // no starting the app while the load-in curtain is still up
+
+  // Load-in: a white curtain stays up until the scene has drawn and the fonts
+  // are in, so nothing pops in half-built. Then everything plays in together.
+  const [sceneDrawn, setSceneDrawn] = useState(false)
+  const [fontsReady, setFontsReady] = useState(false)
+  useEffect(() => {
+    document.fonts?.ready.then(() => setFontsReady(true))
+    // Never leave someone staring at the curtain if a font or frame is slow
+    const fallback = setTimeout(() => {
+      setFontsReady(true)
+      setSceneDrawn(true)
+    }, 5000)
+    return () => clearTimeout(fallback)
+  }, [])
+
+  const start = useCallback(() => {
+    if (!introRef.current || !readyRef.current) return
+    introRef.current = false
+    setIntro(false)
+    setEntering(true)
+    setResetSignal((n) => n + 1)
+  }, [])
+  // Center the title + fridge as one group, and re-center on resize / once fonts load
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const [introPose, setIntroPose] = useState<IntroPose | null>(null)
+  useLayoutEffect(() => {
+    if (!intro) return
+    const update = () => {
+      if (titleRef.current) setIntroPose(layoutIntro(titleRef.current, window.innerWidth, window.innerHeight))
+    }
+    update()
+    document.fonts?.ready.then(update)
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [intro])
+
+  const ready = sceneDrawn && fontsReady && introPose !== null
+  readyRef.current = ready
+
+  useEffect(() => {
+    if (!intro) return
+    const onKey = (e: KeyboardEvent) => {
+      if (['ArrowDown', 'PageDown', 'Space', 'Enter'].includes(e.code)) start()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [intro, start])
+
+  // Put a new magnet from the menu in the nearest free spot to the middle of the door
+  const addMagnet = useCallback((p: MagnetPreset) => {
+    setMagnets((ms) => {
+      const spot = resolveDrop({ x: 0, y: 0 }, p.shape, ms)
+      if (!spot) return ms
+      const id = Math.max(0, ...ms.map((m) => m.id)) + 1
+      return [...ms, { id, shape: p.shape, color: p.color, finish: p.finish, position: spot }]
+    })
+  }, [])
+
+  // Things dragged out of the menu land where the cursor points on the door
+  const three = useRef<RootState | null>(null)
+  const doorPoint = useCallback((clientX: number, clientY: number) => {
+    const st = three.current
+    if (!st || st.camera.position.z <= DOOR_Z) return null // looking from behind: the door isn't there
+    const r = st.gl.domElement.getBoundingClientRect()
+    const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
+    const ray = new THREE.Raycaster()
+    ray.setFromCamera(ndc, st.camera)
+    return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -DOOR_Z), new THREE.Vector3())
+  }, [])
+
+  const dropMagnet = useCallback(
+    (p: MagnetPreset, clientX: number, clientY: number) => {
+      const hit = doorPoint(clientX, clientY)
+      if (!hit) return
+      setMagnets((ms) => {
+        const spot = resolveDrop({ x: hit.x, y: hit.y }, p.shape, ms)
+        if (!spot) return ms // let go off the fridge
+        const id = Math.max(0, ...ms.map((m) => m.id)) + 1
+        return [...ms, { id, shape: p.shape, color: p.color, finish: p.finish, position: spot }]
+      })
+    },
+    [doorPoint],
+  )
+
+  // Paper notes: new ones go on top of the pile, and so does any note you move
+  const newPaper = (ps: PaperData[], kind: PaperKind, color: string | null, position: [number, number]): PaperData[] => {
+    const id = Math.max(0, ...ps.map((p) => p.id)) + 1
+    const tilt = (((id * 97) % 9) - 4) * (Math.PI / 180)
+    return [...ps, { id, kind, color, position, tilt }]
+  }
+  const addPaper = useCallback((kind: PaperKind, color: string | null) => {
+    setPapers((ps) => {
+      // middle of the main door, nudged along for each one so they don't stack exactly
+      const spot = placePaper(kind, -0.25 + (ps.length % 4) * 0.12, 0.3 - (ps.length % 4) * 0.08)
+      return spot ? newPaper(ps, kind, color, spot) : ps
+    })
+  }, [])
+  const dropPaper = useCallback(
+    (kind: PaperKind, color: string | null, clientX: number, clientY: number) => {
+      const hit = doorPoint(clientX, clientY)
+      const spot = hit && placePaper(kind, hit.x, hit.y)
+      if (spot) setPapers((ps) => newPaper(ps, kind, color, spot))
+    },
+    [doorPoint],
+  )
+  const handlePaperDrop = useCallback((id: number, x: number, y: number) => {
+    setPapers((ps) => {
+      const me = ps.find((p) => p.id === id)!
+      const spot = placePaper(me.kind, x, y)
+      const moved = spot ? { ...me, position: spot } : me // off the fridge: slides back
+      return [...ps.filter((p) => p.id !== id), moved]
+    })
+  }, [])
+
+  // Switching fridge model moves the doors, so re-seat everything on the new ones
+  const changeLook = useCallback(
+    (next: FridgeLook) => {
+      if (next.model !== look.model) {
+        setDoorFront(next.model)
+        setMagnets((ms) =>
+          ms.reduce<MagnetData[]>((placed, m) => {
+            const spot =
+              resolveDrop({ x: m.position[0], y: m.position[1] }, m.shape, placed) ??
+              resolveDrop(doorCentre(), m.shape, placed)
+            return spot ? [...placed, { ...m, position: spot }] : placed
+          }, []),
+        )
+        setPapers((ps) =>
+          ps.flatMap((p) => {
+            const spot = placePaper(p.kind, p.position[0], p.position[1]) ?? placePaper(p.kind, doorCentre().x, doorCentre().y)
+            return spot ? [{ ...p, position: spot }] : []
+          }),
+        )
+      }
+      setLook(next)
+      // swing round to frame the new fridge, once it's built
+      if (next.model !== look.model) requestAnimationFrame(() => setResetSignal((n) => n + 1))
+    },
+    [look.model],
+  )
+
+  // Screen pixels per world unit at the door right now, so dragged copies match their real size
+  const pxPerUnit = useCallback(() => {
+    const st = three.current
+    if (!st) return 0
+    const a = new THREE.Vector3(0, 0, DOOR_Z).project(st.camera)
+    const b = new THREE.Vector3(1, 0, DOOR_Z).project(st.camera)
+    return (Math.abs(b.x - a.x) / 2) * st.gl.domElement.clientWidth
+  }, [])
 
   // Settle a dropped magnet: keep it, nudge it to the nearest free spot, or
   // (dropped off the door / nowhere free) leave its old position so it slides back
@@ -38,33 +228,60 @@ export default function App() {
     <>
       <Canvas
         shadows
-        camera={{ position: HOME_POSITION.toArray(), fov: 40, near: 0.05 }}
-        dpr={[1, 2]}
+        camera={{ position: INTRO_POSITION.toArray(), fov: 40, near: 0.05 }}
+        dpr={lowPower ? 1 : [1, 2]}
         onContextMenu={(e) => e.preventDefault()}
+        onCreated={(st) => (three.current = st)}
       >
         <color attach="background" args={[FRIDGE_STYLE.scene.background]} />
+        <fog attach="fog" args={[FRIDGE_STYLE.scene.background, FRIDGE_STYLE.scene.fogNear, FRIDGE_STYLE.scene.fogFar]} />
         <ambientLight intensity={0.25} />
         <directionalLight
           position={[3, 5, 4]}
           intensity={1.2}
           castShadow
-          shadow-mapSize={[1024, 1024]}
+          shadow-mapSize={lowPower ? [512, 512] : [1024, 1024]}
         />
         {/* Soft fill so the back isn't lit by the environment alone */}
         <directionalLight position={[-3, 4, -5]} intensity={0.5} />
-        <Studio />
+        <Studio resolution={lowPower ? 128 : 256} />
+        {!forcedQuality && !lowPower && <PerformanceMonitor onDecline={() => setLowPower(true)} />}
 
-        <Fridge />
-        {magnets.map((m) => (
-          <Magnet key={m.id} data={m} onDragChange={setDragging} onDrop={handleDrop} />
+        <Fridge look={look} onOpenMenu={intro ? undefined : openFridgeMenu} />
+        {papers.map((p, i) => (
+          <PaperNote
+            key={p.id}
+            data={p}
+            stack={i}
+            onDragChange={setDragging}
+            onDrop={handlePaperDrop}
+            onTrash={(id) => setPapers((ps) => ps.filter((q) => q.id !== id))}
+          />
         ))}
+        {magnets.map((m) => {
+          // Starting magnets snap on one by one after the reveal; ones added later pop straight in
+          const order = initialMagnets.findIndex((s) => s.id === m.id)
+          const delay = order < 0 ? 0 : LOAD_IN.magnetsStart + order * LOAD_IN.magnetsStagger
+          return (
+            <Magnet
+              key={m.id}
+              data={m}
+              onDragChange={setDragging}
+              onDrop={handleDrop}
+              onTrash={(id) => setMagnets((ms) => ms.filter((q) => q.id !== id))}
+              appearDelay={ready ? delay : null}
+            />
+          )
+        })}
+        <SceneDrawn onDrawn={() => setSceneDrawn(true)} />
 
         {/* Floor shadow is baked on the first frame: only the static fridge reaches the floor */}
-        <ContactShadows position={[0, -2.2, 0]} opacity={0.4} scale={8} blur={2.5} frames={1} />
+        <GlossyFloor y={-2.2} simple={lowPower} />
+        <ContactShadows key={look.model} position={[0, -2.195, 0]} opacity={0.4} scale={8} blur={2.5} frames={1} />
         <StaticShadows />
         <OrbitControls
           makeDefault
-          enabled={!dragging}
+          enabled={!dragging && !intro}
           enableRotate={!gliding}
           enablePan={!gliding}
           enableZoom={false} // replaced by WheelNavigation
@@ -73,13 +290,47 @@ export default function App() {
           minPolarAngle={CAMERA_CONFIG.minPolarAngle}
           maxPolarAngle={CAMERA_CONFIG.maxPolarAngle}
         />
-        <WheelNavigation disabled={gliding} />
-        <CameraRig resetSignal={0} onGlideChange={setGliding} />
+        <WheelNavigation disabled={gliding || intro} />
+        <CameraRig
+          resetSignal={resetSignal}
+          onGlideChange={onGlideChange}
+          startAtIntro
+          introPose={intro ? introPose : null}
+          revealed={ready}
+        />
       </Canvas>
-      <div className="hud">
-        <h1>Fridge Magnets</h1>
-        <p>Drag magnets around · drag to orbit · scroll or pinch to zoom · two-finger scroll, right-drag or Space+drag to pan</p>
+      {/* Load-in curtain; the silver star only shows if loading takes a moment */}
+      <div className={`loader${ready ? ' is-done' : ''}`} role="status" aria-label={ready ? undefined : 'Loading'}>
+        <LoaderStar />
       </div>
+      {/* Intro overlay: sits above the canvas so the first gesture starts the app */}
+      <div
+        className={`intro${intro ? '' : ' is-gone'}${ready ? '' : ' is-loading'}`}
+        onClick={start}
+        onWheel={start}
+        onTouchMove={start}
+        aria-hidden={!intro}
+      >
+        <h1 ref={titleRef} className="intro-title" aria-label="fridge magnet recipes">
+          <span className="intro-line intro-fridge">
+            fridge <span className="scroll-hint">(scroll down to start!)</span>
+          </span>
+          <span className="intro-line intro-magnet">magnet</span>{' '}
+          <span className="intro-line intro-recipes">recipes</span>
+        </h1>
+      </div>
+      <div className={`tool-menu-wrap${intro || entering ? ' is-hidden' : ''}`}>
+        <ToolMenu
+          onAddMagnet={addMagnet}
+          onDropMagnet={dropMagnet}
+          onAddPaper={addPaper}
+          onDropPaper={dropPaper}
+          pxPerUnit={pxPerUnit}
+        />
+      </div>
+      {fridgeMenuAt && !intro && (
+        <FridgeMenu at={fridgeMenuAt} look={look} onChange={changeLook} onClose={closeFridgeMenu} />
+      )}
     </>
   )
 }

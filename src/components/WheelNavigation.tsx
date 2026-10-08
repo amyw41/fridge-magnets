@@ -2,17 +2,17 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { CAMERA_CONFIG as C } from '../fridgeStyle'
-import { DOOR_Z, FRIDGE, FRIDGE_BOUNDS } from './Fridge'
+import { DOOR_Z, FRIDGE_BOUNDS } from './Fridge'
 
 type Controls = { target: THREE.Vector3; enabled: boolean }
 
 // The body itself (handles and coils excluded), so the anchor lands on the door surface
-const FRIDGE_BOX = new THREE.Box3(
-  new THREE.Vector3(-FRIDGE.width / 2, FRIDGE_BOUNDS.min.y, -DOOR_Z),
-  new THREE.Vector3(FRIDGE.width / 2, FRIDGE_BOUNDS.max.y, DOOR_Z),
-)
+// (kept in step with FRIDGE_BOUNDS, which follows the fridge's size)
+const FRIDGE_BOX = new THREE.Box3()
 /** A trackpad gesture keeps its classification while events keep coming this fast */
 const GESTURE_GAP_MS = 120
+/** A blocked wheel gesture counts as over once its events stop for this long */
+const SWALLOW_GAP_MS = 200
 
 /** Wheel notches are whole numbers of 50+ px; trackpads send small or fractional deltas. */
 const looksLikeNotch = (e: WheelEvent) => Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50
@@ -73,6 +73,8 @@ export default function WheelNavigation({ disabled }: { disabled: boolean }) {
    */
   const findAnchor = (target: THREE.Vector3) => {
     raycaster.setFromCamera(cursor.current, camera)
+    FRIDGE_BOX.min.set(FRIDGE_BOUNDS.min.x, FRIDGE_BOUNDS.min.y, FRIDGE_BOUNDS.min.z + 0.12)
+    FRIDGE_BOX.max.set(FRIDGE_BOUNDS.max.x, FRIDGE_BOUNDS.max.y, DOOR_Z)
     if (raycaster.ray.intersectBox(FRIDGE_BOX, anchor)) return true
     camera.getWorldDirection(forward)
     plane.setFromNormalAndCoplanarPoint(forward, target)
@@ -111,9 +113,20 @@ export default function WheelNavigation({ disabled }: { disabled: boolean }) {
     }
     const blocked = () => disabledRef.current || !controls?.enabled
 
+    // A wheel gesture that arrives while navigation is blocked (e.g. the scroll
+    // that starts the app, then glides) is swallowed to its very end, including
+    // trackpad momentum, instead of zooming/panning the moment the glide finishes.
+    let swallowing = false
+    let lastSwallowed = 0
+
     const onWheel = (e: WheelEvent) => {
       e.preventDefault() // also stops the browser's own pinch-to-zoom of the page
-      if (blocked()) return
+      if (blocked() || (swallowing && e.timeStamp - lastSwallowed < SWALLOW_GAP_MS)) {
+        swallowing = true
+        lastSwallowed = e.timeStamp
+        return
+      }
+      swallowing = false
       setCursor(e.clientX, e.clientY)
 
       // Classify once per gesture so a trackpad swipe can't flip to "mouse" midway

@@ -46,11 +46,30 @@ export const FRIDGE_STYLE = {
 
   // Scene and studio lighting
   scene: {
-    background: '#f3ece2',
+    /** Glossy white studio: walls and floor fade into this colour */
+    background: '#ffffff',
     /** Overall strength of the studio reflections on the pink and chrome */
     environmentIntensity: 1.3,
-    /** Base colour behind the softboxes; shows up in chrome as the "dark" areas */
-    environmentBase: '#4a3f44',
+    /** Base colour behind the softboxes; shows up in chrome as the "dark" areas.
+     *  Lighter = brighter white room, but too light and the chrome looks flat. */
+    environmentBase: '#3d3b40',
+    /** Distance where the floor starts / finishes fading into the background */
+    fogNear: 14,
+    fogFar: 34,
+  },
+  // Glossy white floor that softly mirrors the fridge
+  floor: {
+    color: '#ffffff',
+    /** Self-lit glow so the floor reads as bright white, not grey (0 = only lit by lights) */
+    brightness: 0.9,
+    /** 0 = no reflection, 1 = full mirror */
+    mirror: 0.55,
+    /** How blurry the reflection is (bigger = softer) */
+    blur: 400,
+    /** Surface roughness; low = wet-look gloss */
+    roughness: 0.18,
+    /** Reflection texture size; lower is faster */
+    resolution: 512,
   },
 } as const
 
@@ -68,8 +87,8 @@ export const MAGNET_CONFIG = {
   gap: 0.006,
   /** Soft contact shadow: tight and dark at rest, bigger and fainter while held */
   shadow: {
-    restScale: 1.25,
-    liftScale: 1.9,
+    restScale: 1.5,
+    liftScale: 1.85,
     restOpacity: 0.45,
     liftOpacity: 0.25,
   },
@@ -99,4 +118,17 @@ export const CAMERA_CONFIG = {
   pinchZoomSpeed: 0.01,
   /** Mouse-wheel zoom eases over roughly this long; trackpad input is instant */
   wheelEaseMs: 80,
+} as const
+
+/** First-load reveal. (Title timings live in index.css under "Load-in".) */
+export const LOAD_IN = {
+  /** The camera starts turned this far around the fridge (radians) and glides round to the front */
+  cameraSpin: -0.5,
+  /** ...and starts this much further back (0.35 = 35% further away) */
+  cameraPullBack: 0.35,
+  cameraSeconds: 1.8,
+  /** Magnets snap onto the door one by one, starting this long after the reveal */
+  magnetsStart: 0.9,
+  magnetsStagger: 0.12,
+  magnetPopSeconds: 0.45,
 } as const

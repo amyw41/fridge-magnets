@@ -6,9 +6,9 @@ import { FRIDGE_STYLE as S } from '../fridgeStyle'
  * clearcoat and chrome pick up clean highlights. Rendered once into a cube
  * map; nothing is downloaded.
  */
-export default function Studio() {
+export default function Studio({ resolution = 256 }: { resolution?: number }) {
   return (
-    <Environment resolution={256} environmentIntensity={S.scene.environmentIntensity}>
+    <Environment resolution={resolution} environmentIntensity={S.scene.environmentIntensity}>
       <color attach="background" args={[S.scene.environmentBase]} />
       {/* Big overhead softbox */}
       <Lightformer form="rect" intensity={2} position={[0, 6, 1]} scale={[8, 4, 1]} />
@@ -18,8 +18,8 @@ export default function Studio() {
       {/* Gentle front fill and a rim from behind for the back view */}
       <Lightformer form="rect" intensity={0.8} position={[0, 0, 6]} scale={[5, 3, 1]} />
       <Lightformer form="rect" intensity={1.5} position={[0, 2, -6]} scale={[6, 3, 1]} />
-      {/* Warm floor bounce */}
-      <Lightformer form="rect" intensity={0.6} color="#ffd9c7" position={[0, -6, 0]} scale={[10, 10, 1]} />
+      {/* Bright floor bounce from the white studio floor */}
+      <Lightformer form="rect" intensity={0.5} color="#ffffff" position={[0, -6, 0]} scale={[10, 10, 1]} />
     </Environment>
   )
 }
