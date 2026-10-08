@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { magnetThumb } from '../magnetThumbs'
+import { SILVER } from '../palette'
 
 /**
  * The loading-screen star: a flat SVG twin of the puffy chrome star magnet.
@@ -34,7 +35,7 @@ const STAR_PATH = roundedStarPath()
 export default function LoaderStar() {
   // The real 3D chrome star, rendered to a picture (the same one the magnet
   // menu shows); the flat drawing below is only a fallback without 3D
-  const [picture] = useState(() => magnetThumb('star', '#ffffff', 'chrome'))
+  const [picture] = useState(() => magnetThumb('star', SILVER, 'chrome'))
   if (picture) {
     // (the picture has a little margin round the star, so it's drawn larger to match)
     return <img className="loader-star" src={picture} alt="" aria-hidden="true" draggable={false} style={{ width: 55, height: 55, margin: -5.5 }} />

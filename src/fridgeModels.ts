@@ -46,6 +46,7 @@ export interface FridgeColor {
   color: string
   /** Gets a steel finish instead of enamel */
   metal?: boolean
+  swatch?: string
 }
 
 export interface FridgeModel {

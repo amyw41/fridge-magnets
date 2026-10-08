@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { LOAD_IN, MAGNET_CONFIG as M } from '../fridgeStyle'
 import { prefersReducedMotion } from '../motion'
+import { GOLD, ROSE_GOLD, SILVER } from '../palette'
 import { isOnDoor, MAGNET_SIZE, type MagnetData, type MagnetFinish, type MagnetShape } from '../magnetLayout'
 import { isOverTrash, setTrashState } from '../trash'
 import { panKey } from './CameraRig'
@@ -69,6 +70,35 @@ function roundedStarOutline() {
   return pts
 }
 
+/**
+ * Chubby heart outline, about 1 wide, as points going round anticlockwise.
+ * It's shifted so the origin sits in the fullest part of the heart, which is
+ * where the puffed-up surface is highest.
+ */
+function heartOutline() {
+  const pts: THREE.Vector2[] = []
+  const n = 160
+  for (let i = 0; i < n; i++) {
+    const t = -(i / n) * Math.PI * 2 // negative: anticlockwise, like the star
+    const x = 16 * Math.sin(t) ** 3
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)
+    pts.push(new THREE.Vector2(x / 32, y / 32))
+  }
+  // find the point deepest inside and centre the heart on it
+  let best = new THREE.Vector2()
+  let bestD = -1
+  const p = new THREE.Vector2()
+  for (let y = -0.4; y <= 0.3; y += 0.01) {
+    p.set(0, y)
+    const d = distToOutline(p, pts)
+    if (d > bestD) {
+      bestD = d
+      best = p.clone()
+    }
+  }
+  return pts.map((q) => q.sub(best))
+}
+
 /** Shortest distance from p to the closed outline. */
 function distToOutline(p: THREE.Vector2, outline: THREE.Vector2[]) {
   let best = Infinity
@@ -84,12 +114,11 @@ function distToOutline(p: THREE.Vector2, outline: THREE.Vector2[]) {
 }
 
 /**
- * Puffy star like an inflated foil balloon: the height at each point follows
- * its distance from the edge on a circular profile, so the arms swell into
- * round tubes, the centre domes up and soft creases run into each valley.
+ * Puffy shape like an inflated foil balloon: the height at each point follows
+ * its distance from the edge on a circular profile, so a star's arms swell
+ * into round tubes, the centre domes up and soft creases run into each valley.
  */
-function makePuffyStar() {
-  const outline = roundedStarOutline()
+function makePuffy(outline: THREE.Vector2[]) {
   const n = outline.length
   const rings = 40
   const depth = distToOutline(new THREE.Vector2(), outline) // the centre is the highest point
@@ -154,8 +183,8 @@ function makeButton() {
 }
 
 export function makeGeometry(shape: MagnetShape) {
-  if (shape === 'star' || shape === 'circle') {
-    const g = shape === 'star' ? makePuffyStar() : makeButton()
+  if (shape === 'star' || shape === 'heart' || shape === 'circle') {
+    const g = shape === 'circle' ? makeButton() : makePuffy(shape === 'star' ? roundedStarOutline() : heartOutline())
     g.translate(0, 0, -M.thickness / 2) // back face sits on the door
     g.scale(MAGNET_SIZE, MAGNET_SIZE, MAGNET_SIZE)
     return g
@@ -177,10 +206,22 @@ export function makeGeometry(shape: MagnetShape) {
 
 /** Surface settings, shared with the menu thumbnails so both look the same. */
 export function magnetMaterial(color: string, finish: MagnetFinish): THREE.MeshPhysicalMaterialParameters {
+  // brushed-looking metal: a flat face in mirror chrome would just reflect the dark room
+  if (finish === 'satin')
+    return {
+      color: color === GOLD ? '#ecc673' : color === ROSE_GOLD ? '#efbcaa' : '#eceef1',
+      metalness: 1,
+      roughness: 0.36,
+      envMapIntensity: 2.4,
+    }
   if (finish === 'chrome') {
+    if (color === SILVER) return { color: '#ffffff', metalness: 1, roughness: 0.14, envMapIntensity: 3 }
+    if (color === GOLD) return { color: '#f3c766', metalness: 1, roughness: 0.15, envMapIntensity: 3 }
+    if (color === ROSE_GOLD) return { color: '#f4b9a5', metalness: 1, roughness: 0.15, envMapIntensity: 3 }
     const c = new THREE.Color(color)
-    // white is plain mirror silver
-    if (c.getHSL({ h: 0, s: 0, l: 0 }).l > 0.9) return { color: '#ffffff', metalness: 1, roughness: 0.14, envMapIntensity: 3 }
+    // white is glossy white, like a lacquered balloon
+    if (c.getHSL({ h: 0, s: 0, l: 0 }).l > 0.9)
+      return { color: '#f4f4f2', metalness: 0, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.3 }
     // any other colour: anodised metal, lifted a little so it stays bright,
     // under a clear glossy coat that keeps crisp white highlights
     return {
@@ -220,7 +261,7 @@ function getShadowTexture(shape: MagnetShape) {
   c.width = c.height = n
   const ctx = c.getContext('2d')!
   const s = n / SHADOW_PAD
-  const pts = shape === 'star' ? roundedStarOutline() : makeShape(shape).getPoints(24)
+  const pts = shape === 'star' ? roundedStarOutline() : shape === 'heart' ? heartOutline() : makeShape(shape).getPoints(24)
   ctx.filter = 'blur(4px)'
   ctx.fillStyle = 'rgb(18, 18, 20)' // neutral, so it reads right on any fridge colour
   ctx.beginPath()

@@ -333,6 +333,13 @@ body {
 
 .trash-btn {
   cursor: default;
+  /* the bin sits in the middle of its box, not on the floor line */
+  place-items: center;
+}
+
+/* the plus sits in the middle of its box too */
+.tool-btn:has(.icon-plus) {
+  place-items: center;
 }
 
 .trash-lid {
@@ -354,8 +361,13 @@ body {
   transform: translate(1px, -1.5px) rotate(18deg);
 }
 
-.trash-btn.is-hot .trash-slits {
+/* the whole bin turns red while something hovers over it */
+.trash-btn.is-hot .icon-trash * {
   stroke: #d0586e;
+}
+
+.trash-btn.is-hot .icon-trash :is(rect, path[fill^='url']) {
+  fill: #fbe2e6;
 }
 
 .trash-btn.is-hot .icon-trash {

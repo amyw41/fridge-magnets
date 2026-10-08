@@ -82,15 +82,33 @@ const block = (e: ThreeEvent<PointerEvent>) => e.stopPropagation()
 
 const clamp = THREE.MathUtils.clamp
 
+/** Push a point on the plain box out onto the rounded, domed retro shell (in place). */
+function onBody(v: THREE.Vector3, r: FridgeRounding, inner = new THREE.Vector3(), d = new THREE.Vector3()) {
+  const { plan: R_PLAN, top: R_TOP, bottom: R_BOTTOM, dome: DOME } = r
+  const hz = FRIDGE.depth / 2
+  inner.set(
+    clamp(v.x, -HX + R_PLAN, HX - R_PLAN),
+    clamp(v.y, -HY + R_BOTTOM, HY - R_TOP),
+    clamp(v.z, -hz + R_PLAN, hz - R_PLAN),
+  )
+  const ry = v.y > inner.y ? R_TOP : R_BOTTOM
+  d.subVectors(v, inner).divide(new THREE.Vector3(R_PLAN, ry, R_PLAN)).normalize()
+  v.set(inner.x + d.x * R_PLAN, inner.y + d.y * ry, inner.z + d.z * R_PLAN)
+  if (d.y > 0) {
+    const fx = Math.max(0, 1 - (v.x / HX) ** 2)
+    const fz = Math.max(0, 1 - (v.z / hz) ** 2)
+    v.y += DOME * d.y * fx * fz
+  }
+  return v
+}
+
 /**
  * Retro fridge shell: a subdivided box whose vertices are pushed onto an
  * elliptically-rounded box (big soft shoulders on top, tighter at the base),
  * then the top is bulged upward into a gentle dome.
  */
 function makeBodyGeometry(r: FridgeRounding) {
-  const { plan: R_PLAN, top: R_TOP, bottom: R_BOTTOM, dome: DOME } = r
   const { width, height, depth } = FRIDGE
-  const hz = depth / 2
   const box = new THREE.BoxGeometry(width, height, depth, 48, 96, 36)
   box.deleteAttribute('normal')
   box.deleteAttribute('uv')
@@ -101,19 +119,7 @@ function makeBodyGeometry(r: FridgeRounding) {
 
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i)
-    inner.set(
-      clamp(v.x, -HX + R_PLAN, HX - R_PLAN),
-      clamp(v.y, -HY + R_BOTTOM, HY - R_TOP),
-      clamp(v.z, -hz + R_PLAN, hz - R_PLAN),
-    )
-    const ry = v.y > inner.y ? R_TOP : R_BOTTOM
-    d.subVectors(v, inner).divide(new THREE.Vector3(R_PLAN, ry, R_PLAN)).normalize()
-    v.set(inner.x + d.x * R_PLAN, inner.y + d.y * ry, inner.z + d.z * R_PLAN)
-    if (d.y > 0) {
-      const fx = Math.max(0, 1 - (v.x / HX) ** 2)
-      const fz = Math.max(0, 1 - (v.z / hz) ** 2)
-      v.y += DOME * d.y * fx * fz
-    }
+    onBody(v, r, inner, d)
     pos.setXYZ(i, v.x, v.y, v.z)
   }
 
@@ -145,6 +151,22 @@ function makeSeamGeometry(R_PLAN: number) {
   path.add(new THREE.LineCurve3(new THREE.Vector3(x, y, z), new THREE.Vector3(-x, y, z)))
   path.add(quarterArc(new THREE.Vector3(-x, y, z), new THREE.Vector3(-HX, y, z), new THREE.Vector3(-HX, y, side)))
   return new THREE.TubeGeometry(path, 160, 0.006, 8, false)
+}
+
+/**
+ * The doors' back edge: a seam running up one side, over the top and down the
+ * other, where the front seam's ends meet it.
+ */
+function makeDoorEdgeGeometry(r: FridgeRounding) {
+  const z = DOOR_Z - r.plan
+  const pts: THREE.Vector3[] = []
+  const N = 120
+  // walk the outline of the plain box at this depth, then push it onto the shell
+  for (let i = 0; i <= N; i++) pts.push(new THREE.Vector3(HX, -HY + (2 * HY * i) / N, z))
+  for (let i = 1; i < N; i++) pts.push(new THREE.Vector3(HX - (2 * HX * i) / N, HY, z))
+  for (let i = 0; i <= N; i++) pts.push(new THREE.Vector3(-HX, HY - (2 * HY * i) / N, z))
+  const path = new THREE.CatmullRomCurve3(pts.map((p) => onBody(p, r)))
+  return new THREE.TubeGeometry(path, 600, 0.006, 8, false)
 }
 
 /** One continuous serpentine tube: straight runs joined by half-circle bends. */
@@ -426,6 +448,7 @@ export default function Fridge({ look, onOpenMenu, preview = false }: {
   }, [model, preview])
   const bodyGeometry = useMemo(() => makeBodyGeometry(model.rounding), [model])
   const seamGeometry = useMemo(() => makeSeamGeometry(model.rounding.plan), [model])
+  const doorEdgeGeometry = useMemo(() => makeDoorEdgeGeometry(model.rounding), [model])
   const chrome = useMemo(() => new THREE.MeshStandardMaterial(S.chrome), [])
   // Shadows are drawn once (StaticShadows), so redraw them whenever the fridge
   // itself is rebuilt, e.g. after an edit reloads it, or old shadows linger
@@ -478,6 +501,9 @@ export default function Fridge({ look, onOpenMenu, preview = false }: {
           <mesh geometry={bodyGeometry} material={bodyMat} castShadow receiveShadow {...events} />
           {/* Freezer / main door seam */}
           <mesh geometry={seamGeometry}>
+            <meshStandardMaterial {...S.seam} />
+          </mesh>
+          <mesh geometry={doorEdgeGeometry}>
             <meshStandardMaterial {...S.seam} />
           </mesh>
         </>

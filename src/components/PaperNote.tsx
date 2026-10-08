@@ -1,7 +1,7 @@
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { paperCanvas, paperDesign, type PaperKind } from '../papers'
+import { paperCanvas, paperDesign, type PaperKind, type PaperStyleId } from '../papers'
 import { isOverTrash, setTrashState } from '../trash'
 import { panKey } from './CameraRig'
 import { DOOR_Z } from './Fridge'
@@ -10,7 +10,7 @@ export interface PaperData {
   id: number
   kind: PaperKind
   /** Printed colour; null keeps the paper's own */
-  color: string | null
+  style: PaperStyleId
   /** Centre on the door plane */
   position: [number, number]
   /** Slight turn, in radians, so notes don't look machine-placed */
@@ -67,7 +67,7 @@ export default function PaperNote({
   const gl = useThree((s) => s.gl)
 
   const material = useMemo(() => {
-    const map = new THREE.CanvasTexture(paperCanvas(data.kind, data.color))
+    const map = new THREE.CanvasTexture(paperCanvas(data.kind, data.style))
     map.colorSpace = THREE.SRGBColorSpace
     map.anisotropy = gl.capabilities.getMaxAnisotropy()
     // a little self-glow from its own colours, so white paper reads white under the studio light
@@ -80,7 +80,7 @@ export default function PaperNote({
       transparent: true,
       depthWrite: false,
     })
-  }, [data.kind, data.color, gl])
+  }, [data.kind, data.style, gl])
   const shadowMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({ map: getShadowTexture(data.kind), transparent: true, depthWrite: false, opacity: 0.28 }),
     [data.kind],

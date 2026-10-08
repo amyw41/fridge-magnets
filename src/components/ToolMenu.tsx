@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom'
 import { magnetThumb } from '../magnetThumbs'
 import type { MagnetFinish, MagnetShape } from '../magnetLayout'
 import { MAGNET_SIZE } from '../magnetLayout'
-import { PALETTE } from '../palette'
-import { PAPER_COLORS, paperThumb, PAPERS, type PaperKind } from '../papers'
+import { PALETTE, PRECIOUS, SILVER } from '../palette'
+import { PAPER_STYLES, paperThumb, PAPERS, type PaperKind, type PaperStyleId } from '../papers'
 
 export interface MagnetPreset {
   shape: MagnetShape
@@ -15,6 +15,7 @@ export interface MagnetPreset {
 
 const MAGNET_SHAPES: { shape: MagnetShape; label: string }[] = [
   { shape: 'star', label: 'star' },
+  { shape: 'heart', label: 'heart' },
   { shape: 'circle', label: 'dot' },
 ]
 
@@ -24,8 +25,9 @@ const MAGNET_COLORS = PALETTE
 const presetOf = (shapeIndex: number, colorIndex: number): MagnetPreset => {
   const { shape, label } = MAGNET_SHAPES[shapeIndex]
   const c = MAGNET_COLORS[colorIndex]
-  // stars are always shiny metal, tinted by the colour (white is plain silver); dots are glossy plastic
-  const finish: MagnetFinish = shape === 'star' ? 'chrome' : 'plastic'
+  // stars and hearts are always shiny, tinted by the colour; dots are glossy plastic, or satin metal in the metals
+  const precious = PRECIOUS.includes(c.color)
+  const finish: MagnetFinish = shape !== 'circle' ? 'chrome' : precious ? 'satin' : 'plastic'
   return { shape, color: c.color, finish, label: `${c.label} ${label}` }
 }
 
@@ -35,14 +37,18 @@ function Swatches({
   value,
   onChange,
   optional = false,
+  label = 'colour',
+  className = '',
 }: {
   colors: { label: string; color: string; swatch?: string }[]
   value: number | null
   onChange: (i: number | null) => void
   optional?: boolean
+  label?: string
+  className?: string
 }) {
   return (
-    <div className="tool-swatches" role="radiogroup" aria-label="colour">
+    <div className={`tool-swatches ${className}`} role="radiogroup" aria-label={label}>
       {colors.map((c, i) => (
         <button
           key={c.label}
@@ -78,22 +84,22 @@ export default function ToolMenu({
   onAddMagnet: (p: MagnetPreset) => void
   /** Dragged out and let go at this screen point */
   onDropMagnet: (p: MagnetPreset, clientX: number, clientY: number) => void
-  onAddPaper: (kind: PaperKind, color: string | null) => void
-  onDropPaper: (kind: PaperKind, color: string | null, clientX: number, clientY: number) => void
+  onAddPaper: (kind: PaperKind, style: PaperStyleId) => void
+  onDropPaper: (kind: PaperKind, style: PaperStyleId, clientX: number, clientY: number) => void
   /** Screen pixels per world unit on the door right now */
   pxPerUnit: () => number
 }) {
   const [open, setOpen] = useState<Section | null>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   // Chosen colours, kept while the panels open and close
-  const [magnetColor, setMagnetColor] = useState(0) // white: a silver star
-  const [paperColor, setPaperColor] = useState<number | null>(null) // none: each paper's own
+  const [magnetColor, setMagnetColor] = useState(MAGNET_COLORS.findIndex((c) => c.color === SILVER)) // a silver star
+  const [paperStyle, setPaperStyle] = useState(1) // lined
   const magnetThumbs = useMemo(
     () => MAGNET_SHAPES.map((_, i) => { const p = presetOf(i, magnetColor); return magnetThumb(p.shape, p.color, p.finish) }),
     [magnetColor],
   )
-  const tint = paperColor === null ? null : PAPER_COLORS[paperColor].color
-  const paperThumbs = useMemo(() => PAPERS.map((p) => paperThumb(p.kind, tint)), [tint])
+  const style = PAPER_STYLES[paperStyle].id
+  const paperThumbs = useMemo(() => PAPERS.map((p) => paperThumb(p.kind, style)), [style])
   const thumbOf = (g: Grabbed) => (g.what === 'magnet' ? magnetThumbs : paperThumbs)[g.i]
   // Each button shows whichever option was last hovered in its panel
   const [magnetPreview, setMagnetPreview] = useState<number | null>(0) // starts on the silver star
@@ -105,8 +111,8 @@ export default function ToolMenu({
   const press = useRef<(Grabbed & { x: number; y: number; dragging: boolean }) | null>(null)
   const magnetColorRef = useRef(magnetColor)
   magnetColorRef.current = magnetColor
-  const paperColorRef = useRef(paperColor)
-  paperColorRef.current = paperColor
+  const paperStyleRef = useRef(style)
+  paperStyleRef.current = style
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const p = press.current
@@ -132,10 +138,8 @@ export default function ToolMenu({
         if (p.dragging) onDropMagnet(preset, e.clientX, e.clientY)
         else onAddMagnet(preset)
       } else {
-        const i = paperColorRef.current
-        const color = i === null ? null : PAPER_COLORS[i].color
-        if (p.dragging) onDropPaper(PAPERS[p.i].kind, color, e.clientX, e.clientY)
-        else onAddPaper(PAPERS[p.i].kind, color)
+        if (p.dragging) onDropPaper(PAPERS[p.i].kind, paperStyleRef.current, e.clientX, e.clientY)
+        else onAddPaper(PAPERS[p.i].kind, paperStyleRef.current)
       }
     }
     window.addEventListener('pointermove', move)
@@ -166,13 +170,14 @@ export default function ToolMenu({
     closeTimer.current = window.setTimeout(() => setOpen(null), 180)
   }
 
-  const item = (s: Section, label: string, icon: ReactNode, panel: ReactNode) => (
+  // onPick: clicking the button itself adds the item its icon is showing
+  const item = (s: Section, label: string, icon: ReactNode, panel: ReactNode, onPick?: () => void) => (
     <div className="tool-item" onMouseEnter={() => openNow(s)} onMouseLeave={closeSoon}>
       <button
         className={`tool-btn${open === s ? ' is-open' : ''}`}
         aria-label={label}
         aria-expanded={open === s}
-        onClick={() => setOpen(open === s ? null : s)}
+        onClick={() => (onPick ? onPick() : setOpen(open === s ? null : s))}
       >
         {icon}
       </button>
@@ -196,7 +201,7 @@ export default function ToolMenu({
           <img className="icon-preview" src={paperThumbs[paperPreview]} alt="" draggable={false} />
         ),
         <>
-        <Swatches colors={PAPER_COLORS} value={paperColor} onChange={setPaperColor} optional />
+        <Swatches colors={PAPER_STYLES} value={paperStyle} onChange={(i) => i !== null && setPaperStyle(i)} label="paper" />
         <div className="option-grid">
           {PAPERS.map((p, i) => (
             <button
@@ -206,7 +211,7 @@ export default function ToolMenu({
               title={p.label}
               onPointerEnter={() => setPaperPreview(i)}
               onPointerDown={startPress('paper', i)}
-              onKeyDown={onKey(() => onAddPaper(p.kind, tint))}
+              onKeyDown={onKey(() => onAddPaper(p.kind, style))}
             >
               <img
                 className="paper-thumb"
@@ -219,6 +224,7 @@ export default function ToolMenu({
           ))}
         </div>
         </>,
+        paperPreview === null ? undefined : () => onAddPaper(PAPERS[paperPreview].kind, style),
       )}
       {item(
         'magnets',
@@ -249,9 +255,10 @@ export default function ToolMenu({
           })}
         </div>
         </>,
+        magnetPreview === null ? undefined : () => onAddMagnet(presetOf(magnetPreview, magnetColor)),
       )}
       <button className="tool-btn trash-btn" aria-label="trash" title="Drag a magnet or note here to throw it away">
-        <svg className="icon-trash" viewBox="6.5 6.5 19 19" aria-hidden="true">
+        <svg className="icon-trash" viewBox="6.5 7 19 19" aria-hidden="true">
           <defs>
             {/* Same silver as the plus, a shade deeper so the bin's outline reads at a glance */}
             <linearGradient id="trash-rim" x1="0" y1="0" x2="1" y2="1">

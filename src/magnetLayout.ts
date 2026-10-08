@@ -3,7 +3,7 @@ import { circleInDoor, distToRect, doorFront } from './fridgeModels'
 import { MAGNET_CONFIG } from './fridgeStyle'
 
 export type MagnetShape = 'circle' | 'square' | 'star' | 'heart'
-export type MagnetFinish = 'chrome' | 'plastic'
+export type MagnetFinish = 'chrome' | 'satin' | 'plastic'
 
 export interface MagnetData {
   id: number

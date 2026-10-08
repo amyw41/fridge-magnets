@@ -32,7 +32,12 @@ export default function FridgeMenu({
 
   useEffect(() => {
     const down = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose()
+      if (ref.current?.contains(e.target as Node)) return
+      // a click away (even on the fridge) only closes the menu, it doesn't reopen it
+      const swallow = (c: MouseEvent) => c.stopPropagation()
+      window.addEventListener('click', swallow, { capture: true, once: true })
+      window.addEventListener('pointerdown', () => window.removeEventListener('click', swallow, true), { capture: true, once: true })
+      onClose()
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('pointerdown', down, true)
@@ -85,7 +90,7 @@ export default function FridgeMenu({
           <button
             key={c.color}
             className={`fridge-swatch${c.color === look.color ? ' is-active' : ''}`}
-            style={{ background: c.color }}
+            style={{ background: c.swatch ?? c.color }}
             title={c.label}
             aria-label={c.label}
             aria-pressed={c.color === look.color}

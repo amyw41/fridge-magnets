@@ -15,16 +15,17 @@ import ToolMenu, { type MagnetPreset } from './components/ToolMenu'
 import WheelNavigation from './components/WheelNavigation'
 import { CAMERA_CONFIG, FRIDGE_STYLE, LOAD_IN } from './fridgeStyle'
 import { layoutIntro, type IntroPose } from './introLayout'
-import { placePaper, type PaperKind } from './papers'
+import { placePaper, type PaperKind, type PaperStyleId } from './papers'
+import { SILVER } from './palette'
 import { DEFAULT_LOOK, doorCentre, setDoorFront, type FridgeLook } from './fridgeModels'
 import { resolveDrop, type MagnetData } from './magnetLayout'
 
 // Starting spots keep clear of the handles on the left near the door seam
 const initialMagnets: MagnetData[] = [
-  { id: 1, shape: 'star', color: '#ffffff', finish: 'chrome', position: [0.25, 1.15] },
+  { id: 1, shape: 'star', color: SILVER, finish: 'chrome', position: [0.25, 1.15] },
   { id: 2, shape: 'circle', color: '#fbfaf6', finish: 'plastic', position: [0.3, 0.4] },
-  { id: 3, shape: 'star', color: '#ffffff', finish: 'chrome', position: [-0.25, -0.05] },
-  { id: 4, shape: 'star', color: '#ffffff', finish: 'chrome', position: [0.3, -0.6] },
+  { id: 3, shape: 'star', color: SILVER, finish: 'chrome', position: [-0.25, -0.05] },
+  { id: 4, shape: 'star', color: SILVER, finish: 'chrome', position: [0.3, -0.6] },
   { id: 5, shape: 'circle', color: '#fbfaf6', finish: 'plastic', position: [-0.3, -1.1] },
 ]
 
@@ -149,23 +150,23 @@ export default function App() {
   )
 
   // Paper notes: new ones go on top of the pile, and so does any note you move
-  const newPaper = (ps: PaperData[], kind: PaperKind, color: string | null, position: [number, number]): PaperData[] => {
+  const newPaper = (ps: PaperData[], kind: PaperKind, style: PaperStyleId, position: [number, number]): PaperData[] => {
     const id = Math.max(0, ...ps.map((p) => p.id)) + 1
     const tilt = (((id * 97) % 9) - 4) * (Math.PI / 180)
-    return [...ps, { id, kind, color, position, tilt }]
+    return [...ps, { id, kind, style, position, tilt }]
   }
-  const addPaper = useCallback((kind: PaperKind, color: string | null) => {
+  const addPaper = useCallback((kind: PaperKind, style: PaperStyleId) => {
     setPapers((ps) => {
       // middle of the main door, nudged along for each one so they don't stack exactly
       const spot = placePaper(kind, -0.25 + (ps.length % 4) * 0.12, 0.3 - (ps.length % 4) * 0.08)
-      return spot ? newPaper(ps, kind, color, spot) : ps
+      return spot ? newPaper(ps, kind, style, spot) : ps
     })
   }, [])
   const dropPaper = useCallback(
-    (kind: PaperKind, color: string | null, clientX: number, clientY: number) => {
+    (kind: PaperKind, style: PaperStyleId, clientX: number, clientY: number) => {
       const hit = doorPoint(clientX, clientY)
       const spot = hit && placePaper(kind, hit.x, hit.y)
-      if (spot) setPapers((ps) => newPaper(ps, kind, color, spot))
+      if (spot) setPapers((ps) => newPaper(ps, kind, style, spot))
     },
     [doorPoint],
   )
