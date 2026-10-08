@@ -14,10 +14,10 @@ const COLS = 2
 const ROWS = Math.ceil(FRIDGE_MODELS.length / COLS)
 export const PREVIEW_W = COLS * TILE_W + (COLS - 1) * GAP
 export const PREVIEW_H = ROWS * TILE_H + (ROWS - 1) * GAP
-/** Gap between a fridge's feet and the bottom of its tile, in px */
-const FOOT = 4
+/** Forward tip of each fridge, so its top shows */
+const TIP = 0.1
 
-/** Every model, each standing at the bottom of its own tile */
+/** Every model, each centred in its own tile */
 function PreviewScene({ color }: { color: string }) {
   return (
     <>
@@ -26,15 +26,17 @@ function PreviewScene({ color }: { color: string }) {
       <directionalLight position={[-3, 4, -5]} intensity={0.5} />
       <Studio resolution={64} />
       {FRIDGE_MODELS.map((m, i) => {
-        // centre of this tile's bottom edge, in world units from the picture's centre
+        // where its feet go so the fridge (front plus the top showing) sits in
+        // the middle of its tile, in px from the picture's centre
         const col = i % COLS
         const row = Math.floor(i / COLS)
+        const tall = (m.size.h * Math.cos(TIP) + m.size.d * Math.sin(TIP)) * ZOOM
         const px = col * (TILE_W + GAP) + TILE_W / 2 - PREVIEW_W / 2
-        const py = row * (TILE_H + GAP) + TILE_H - FOOT - PREVIEW_H / 2
+        const py = row * (TILE_H + GAP) + TILE_H / 2 + tall / 2 - PREVIEW_H / 2
         return (
           <group key={m.id} position={[px / ZOOM, -py / ZOOM, 0]}>
             {/* turned and tipped about its own feet, so depth and handles read */}
-            <group rotation={[0.1, -0.38, 0]}>
+            <group rotation={[TIP, -0.38, 0]}>
               <group position={[0, -FLOOR_Y, 0]}>
                 <Fridge look={{ model: m.id, color }} preview />
               </group>

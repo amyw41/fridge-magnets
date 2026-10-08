@@ -20,6 +20,16 @@ function fitHome() {
 }
 const DURATION = 1.4
 
+/** A copy of the camera set to the front view, for pictures that shouldn't depend on where you've moved */
+export function homeCamera(camera: THREE.Camera) {
+  fitHome()
+  const c = camera.clone()
+  c.position.setFromSpherical(HOME).add(homeTarget)
+  c.lookAt(homeTarget)
+  c.updateMatrixWorld()
+  return c
+}
+
 /** Whether Space is held, which turns left-drag into panning (read by magnets too). */
 export const panKey = { held: false }
 

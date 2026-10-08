@@ -191,7 +191,7 @@ body {
 }
 
 .scroll-hint {
-  transition-delay: 1.9s;
+  transition-delay: 0.9s;
 }
 
 .intro.is-loading .intro-line {
@@ -262,8 +262,301 @@ body {
   backdrop-filter: blur(18px) saturate(1.4);
 }
 
+/* Share and clear all: glass pills in the top corner, same frosted look as the sidebar */
+.fridge-actions {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.fridge-actions.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+
+.glass-btn {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px 0 13px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: #4a4c52;
+  cursor: pointer;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.glass-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  transition: background 0.15s ease;
+}
+
+.glass-btn:hover:not(:disabled)::before {
+  background: rgba(208, 208, 214, 0.6);
+}
+
+.glass-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.glass-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.glass-btn .glass-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+/* ready to clear: the bin goes red like the sidebar's when something's over it */
+.glass-btn.is-armed .glass-icon * {
+  stroke: #d0586e;
+}
+
+.glass-btn.is-armed .glass-icon :is(rect, g) {
+  fill: #fbe2e6;
+}
+
+.glass-btn.is-open::before {
+  background: rgba(208, 208, 214, 0.6);
+}
+
+.share-wrap {
+  position: relative;
+}
+
+.share-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  min-width: 100%;
+}
+
+.share-menu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 16px;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.share-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: #4a4c52;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.share-menu button:hover {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.share-menu svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.glass-btn.is-armed {
+  color: #c4475e;
+}
+
+.glass-btn:focus-visible {
+  outline: 2px solid #8fb8ff;
+  outline-offset: 2px;
+}
+
 .tool-item {
   position: relative;
+}
+
+/* ---------- How it works: a glass card that folds into a ? button ---------- */
+.help {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 5;
+  transition: opacity 0.35s ease;
+}
+
+.help.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.help-card {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  isolation: isolate;
+  padding: 16px 16px 14px;
+  transform-origin: 100% 100%;
+  transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.2s ease;
+}
+
+.help-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 20px;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.help:not(.is-open) .help-card {
+  transform: scale(0.12);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.help-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 11px;
+}
+
+.help-card li {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #55575d;
+}
+
+.help-card b {
+  font-weight: 600;
+  color: #3d3f44;
+}
+
+.help-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+}
+
+.help-icon svg,
+.help-icon img {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+.help-icon .icon-paper {
+  width: 21px;
+  height: 21px;
+}
+
+.help-done {
+  display: block;
+  margin: 14px 0 0 auto;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  font: inherit;
+  font-size: 13px;
+  color: #3d3f44;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.help-done:hover {
+  background: #ffffff;
+}
+
+.help-btn {
+  position: relative;
+  isolation: isolate;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  color: #6a6f77;
+  cursor: pointer;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+.help-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  transition: background 0.15s ease;
+}
+
+.help-btn:hover::before {
+  background: rgba(208, 208, 214, 0.6);
+}
+
+.help.is-open .help-btn {
+  transform: scale(0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.help-done:focus-visible,
+.help-btn:focus-visible {
+  outline: 2px solid #8fb8ff;
+  outline-offset: 2px;
 }
 
 .tool-btn {
@@ -273,8 +566,7 @@ body {
   border-radius: 14px;
   background: transparent;
   display: grid;
-  /* stood on a shared floor line, so their sizes compare */
-  place-items: end center;
+  place-items: center;
   padding: 0;
   overflow: hidden;
   cursor: pointer;
@@ -329,17 +621,14 @@ body {
   display: block;
   width: 32px;
   height: 32px;
+  /* room for the lid when it tips up */
+  overflow: visible;
 }
 
 .trash-btn {
   cursor: default;
-  /* the bin sits in the middle of its box, not on the floor line */
-  place-items: center;
-}
-
-/* the plus sits in the middle of its box too */
-.tool-btn:has(.icon-plus) {
-  place-items: center;
+  /* the lid tips up out of the box when something's held over it */
+  overflow: visible;
 }
 
 .trash-lid {
@@ -608,8 +897,7 @@ body {
   border-radius: 14px;
   background: transparent;
   display: grid;
-  /* stood on a shared floor line, so their sizes compare */
-  place-items: end center;
+  place-items: center;
   padding: 0;
   overflow: hidden;
   cursor: pointer;

@@ -1,9 +1,11 @@
 import { Canvas, useFrame, type RootState } from '@react-three/fiber'
 import { ContactShadows, OrbitControls, PerformanceMonitor } from '@react-three/drei'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import CameraRig, { INTRO_POSITION } from './components/CameraRig'
+import CameraRig, { homeCamera, INTRO_POSITION } from './components/CameraRig'
 import * as THREE from 'three'
 import Fridge, { DOOR_Z } from './components/Fridge'
+import FridgeActions from './components/FridgeActions'
+import HelpCard from './components/HelpCard'
 import FridgeMenu from './components/FridgeMenu'
 import GlossyFloor from './components/GlossyFloor'
 import LoaderStar from './components/LoaderStar'
@@ -18,6 +20,7 @@ import { layoutIntro, type IntroPose } from './introLayout'
 import { placePaper, type PaperKind, type PaperStyleId } from './papers'
 import { SILVER } from './palette'
 import { DEFAULT_LOOK, doorCentre, setDoorFront, type FridgeLook } from './fridgeModels'
+import { fridgeLink, saveFridge, savedFridge } from './fridgeSave'
 import { resolveDrop, type MagnetData } from './magnetLayout'
 
 // Starting spots keep clear of the handles on the left near the door seam
@@ -39,10 +42,12 @@ function SceneDrawn({ onDrawn }: { onDrawn: () => void }) {
 }
 
 export default function App() {
-  const [magnets, setMagnets] = useState(initialMagnets)
-  const [papers, setPapers] = useState<PaperData[]>([])
+  // Picks up where you left off last visit (saved in this browser), else the starter fridge
+  const [magnets, setMagnets] = useState(() => savedFridge()?.magnets ?? initialMagnets)
+  const [papers, setPapers] = useState<PaperData[]>(() => savedFridge()?.papers ?? [])
   // The fridge itself: which model and colour, and where its pop-up menu is open
-  const [look, setLook] = useState<FridgeLook>(DEFAULT_LOOK)
+  const [look, setLook] = useState<FridgeLook>(() => savedFridge()?.look ?? DEFAULT_LOOK)
+  useEffect(() => saveFridge({ look, magnets, papers }), [look, magnets, papers])
   const [fridgeMenuAt, setFridgeMenuAt] = useState<{ x: number; y: number } | null>(null)
   const openFridgeMenu = useCallback((x: number, y: number) => setFridgeMenuAt({ x, y }), [])
   const closeFridgeMenu = useCallback(() => setFridgeMenuAt(null), [])
@@ -180,6 +185,45 @@ export default function App() {
   }, [])
 
   // Switching fridge model moves the doors, so re-seat everything on the new ones
+  // Share as a picture: the fridge from the front view (wherever you've moved), downloaded as an image
+  const savePicture = useCallback(async (): Promise<'done' | 'cancelled'> => {
+    const st = three.current
+    if (!st) return 'cancelled'
+    st.gl.render(st.scene, homeCamera(st.camera))
+    // the picture is taken the moment toBlob is called, then the screen goes back to your view
+    const blob = new Promise<Blob | null>((ok) => st.gl.domElement.toBlob(ok, 'image/png'))
+    st.gl.render(st.scene, st.camera)
+    const png = await blob
+    if (!png) return 'cancelled'
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(png)
+    a.download = 'my-fridge.png'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    return 'done'
+  }, [])
+
+  // Share as a link that opens this exact fridge. Phones get the share sheet;
+  // elsewhere it's copied to paste wherever.
+  const shareLink = useCallback(async (): Promise<'shared' | 'copied' | 'cancelled'> => {
+    const url = fridgeLink({ look, magnets, papers })
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      try {
+        await navigator.share({ url, title: 'my fridge' })
+        return 'shared'
+      } catch {
+        return 'cancelled'
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url)
+      return 'copied'
+    } catch {
+      prompt('copy your fridge link', url)
+      return 'cancelled'
+    }
+  }, [look, magnets, papers])
+
   const changeLook = useCallback(
     (next: FridgeLook) => {
       if (next.model !== look.model) {
@@ -329,6 +373,17 @@ export default function App() {
           pxPerUnit={pxPerUnit}
         />
       </div>
+      <HelpCard hidden={intro || entering} />
+      <FridgeActions
+        hidden={intro || entering}
+        onPicture={savePicture}
+        onLink={shareLink}
+        onClear={() => {
+          setMagnets([])
+          setPapers([])
+        }}
+        empty={!magnets.length && !papers.length}
+      />
       {fridgeMenuAt && !intro && (
         <FridgeMenu at={fridgeMenuAt} look={look} onChange={changeLook} onClose={closeFridgeMenu} />
       )}
