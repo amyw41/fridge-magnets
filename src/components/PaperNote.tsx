@@ -1,12 +1,13 @@
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { paperCanvas, paperDesign, type PaperKind, type PaperStyleId } from '../papers'
+import { hasRecipe, paperCanvas, paperDesign, recipeOf, writtenPaperCanvas, type PaperKind, type PaperStyleId, type Recipe } from '../papers'
 import { isOverTrash, setTrashState } from '../trash'
 import { panKey } from './CameraRig'
 import { DOOR_Z } from './Fridge'
 
-export interface PaperData {
+/** A note, and the recipe written on it (if any) */
+export interface PaperData extends Partial<Recipe> {
   id: number
   kind: PaperKind
   /** Printed colour; null keeps the paper's own */
@@ -51,6 +52,7 @@ export default function PaperNote({
   onDragChange,
   onDrop,
   onTrash,
+  onOpen,
 }: {
   data: PaperData
   /** Position in the pile: later notes lie on top */
@@ -59,6 +61,8 @@ export default function PaperNote({
   onDrop: (id: number, x: number, y: number) => void
   /** Let go over the trash button */
   onTrash: (id: number) => void
+  /** Clicked without dragging: open it to write on */
+  onOpen: (id: number) => void
 }) {
   const [w, h] = paperDesign(data.kind).size
   const ref = useRef<THREE.Mesh>(null!)
@@ -81,6 +85,28 @@ export default function PaperNote({
       depthWrite: false,
     })
   }, [data.kind, data.style, gl])
+
+  // Once there's a recipe on it, write it onto the note (the handwriting font loads first).
+  // Keyed on the recipe's content, so moving the note doesn't redraw it.
+  const recipeKey = JSON.stringify(recipeOf(data))
+  useEffect(() => {
+    if (!hasRecipe(data)) {
+      material.map!.image = paperCanvas(data.kind, data.style)
+      material.map!.needsUpdate = true
+      return
+    }
+    let live = true
+    const recipe = recipeOf(data)
+    writtenPaperCanvas(data.kind, data.style, recipe).then((c) => {
+      if (!live) return
+      material.map!.image = c
+      material.map!.needsUpdate = true
+    })
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [material, data.kind, data.style, recipeKey])
   const shadowMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({ map: getShadowTexture(data.kind), transparent: true, depthWrite: false, opacity: 0.28 }),
     [data.kind],
@@ -91,6 +117,7 @@ export default function PaperNote({
   const ray = useRef(new THREE.Ray())
   const grabOffset = useRef(new THREE.Vector2())
   const lift = useRef(0)
+  const downAt = useRef({ x: 0, y: 0 })
 
   const followPointer = () => {
     const m = ref.current
@@ -108,6 +135,7 @@ export default function PaperNote({
     if (controls) controls.enabled = false
     const m = ref.current
     grabOffset.current.set(m.position.x - e.point.x, m.position.y - e.point.y)
+    downAt.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }
     ray.current.copy(e.ray)
     dragging.current = true
     onDragChange(true)
@@ -131,7 +159,9 @@ export default function PaperNote({
     onDragChange(false)
     setCursor(hovered.current ? 'grab' : 'auto')
     setTrashState(false, false)
-    if (isOverTrash(e.nativeEvent.clientX, e.nativeEvent.clientY)) onTrash(data.id)
+    const { clientX: x, clientY: y } = e.nativeEvent
+    if (isOverTrash(x, y)) onTrash(data.id)
+    else if (Math.hypot(x - downAt.current.x, y - downAt.current.y) < 5) onOpen(data.id)
     else onDrop(data.id, ref.current.position.x, ref.current.position.y)
   }
 

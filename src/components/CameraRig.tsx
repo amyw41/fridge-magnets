@@ -270,6 +270,8 @@ export default function CameraRig({
     }
     const down = (e: KeyboardEvent) => {
       if (e.code !== 'Space' || e.repeat) return
+      // typing (a recipe, say): a space is just a space
+      if ((e.target as HTMLElement).closest?.('input, textarea')) return
       e.preventDefault()
       set(true)
     }

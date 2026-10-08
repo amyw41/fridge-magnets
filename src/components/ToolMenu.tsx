@@ -103,7 +103,8 @@ export default function ToolMenu({
   const thumbOf = (g: Grabbed) => (g.what === 'magnet' ? magnetThumbs : paperThumbs)[g.i]
   // Each button shows whichever option was last hovered in its panel
   const [magnetPreview, setMagnetPreview] = useState<number | null>(0) // starts on the silver star
-  const [paperPreview, setPaperPreview] = useState<number | null>(null)
+  // starts on the square note, so the button shows (and adds) a real option straight away
+  const [paperPreview, setPaperPreview] = useState<number | null>(0)
 
   // Drag an option out of the panel: a copy follows the cursor, at the size it
   // will be on the fridge, until it's let go

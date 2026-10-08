@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import Fridge, { DOOR_Z } from './components/Fridge'
 import FridgeActions from './components/FridgeActions'
 import HelpCard from './components/HelpCard'
+import RecipeEditor from './components/RecipeEditor'
 import FridgeMenu from './components/FridgeMenu'
 import GlossyFloor from './components/GlossyFloor'
 import LoaderStar from './components/LoaderStar'
@@ -45,6 +46,9 @@ export default function App() {
   // Picks up where you left off last visit (saved in this browser), else the starter fridge
   const [magnets, setMagnets] = useState(() => savedFridge()?.magnets ?? initialMagnets)
   const [papers, setPapers] = useState<PaperData[]>(() => savedFridge()?.papers ?? [])
+  // The note open for writing a recipe on, if any
+  const [writing, setWriting] = useState<number | null>(null)
+  const writingPaper = papers.find((p) => p.id === writing)
   // The fridge itself: which model and colour, and where its pop-up menu is open
   const [look, setLook] = useState<FridgeLook>(() => savedFridge()?.look ?? DEFAULT_LOOK)
   useEffect(() => saveFridge({ look, magnets, papers }), [look, magnets, papers])
@@ -301,6 +305,7 @@ export default function App() {
             onDragChange={setDragging}
             onDrop={handlePaperDrop}
             onTrash={(id) => setPapers((ps) => ps.filter((q) => q.id !== id))}
+            onOpen={setWriting}
           />
         ))}
         {magnets.map((m) => {
@@ -374,6 +379,14 @@ export default function App() {
         />
       </div>
       <HelpCard hidden={intro || entering} />
+      {writingPaper && (
+        <RecipeEditor
+          key={writingPaper.id}
+          paper={writingPaper}
+          onSave={(recipe) => setPapers((ps) => ps.map((p) => (p.id === writingPaper.id ? { ...p, ...recipe } : p)))}
+          onClose={() => setWriting(null)}
+        />
+      )}
       <FridgeActions
         hidden={intro || entering}
         onPicture={savePicture}

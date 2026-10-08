@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { magnetThumb } from '../magnetThumbs'
 import { SILVER } from '../palette'
+import { paperThumb } from '../papers'
 
 const SEEN = 'fridge-magnets:help-seen'
 
@@ -19,6 +20,7 @@ const seenBefore = () => {
 export default function HelpCard({ hidden }: { hidden: boolean }) {
   const [open, setOpen] = useState(() => !seenBefore())
   const [star] = useState(() => magnetThumb('star', SILVER, 'chrome'))
+  const [note] = useState(() => paperThumb('sticky', 'lined'))
 
   const close = () => {
     setOpen(false)
@@ -43,7 +45,7 @@ export default function HelpCard({ hidden }: { hidden: boolean }) {
       <section className="help-card" aria-label="How it works" aria-hidden={!open}>
         <p className="tool-panel-title">how it works</p>
         <ul>
-          {row(<span className="icon-paper" />, 'notes', 'click to stick one on, or hover to pick a paper and drag it into place.')}
+          {row(<img src={note} alt="" className="help-note" />, 'notes', 'click to stick one on, then click it on the fridge to write your recipe.')}
           {row(<img src={star} alt="" />, 'magnets', 'click to add one, or hover to pick a shape and colour.')}
           {row(<TrashIcon />, 'trash', 'drag a magnet or note onto it to throw it away.')}
           {row(<FridgeIcon />, 'your fridge', 'click a bare spot on it to change its style and colour.')}

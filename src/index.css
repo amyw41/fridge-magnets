@@ -411,6 +411,360 @@ body {
   position: relative;
 }
 
+/* ---------- Writing a recipe: the note comes up large over the fridge ---------- */
+.recipe-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: rgba(236, 236, 240, 0.45);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: recipe-in 0.22s ease-out;
+}
+
+@keyframes recipe-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.recipe-sheet {
+  position: relative;
+  flex: none;
+  background-size: 100% 100%;
+  filter: drop-shadow(0 14px 22px rgba(40, 20, 30, 0.2)) drop-shadow(0 2px 4px rgba(40, 20, 30, 0.12));
+  animation: recipe-sheet-in 0.28s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+@keyframes recipe-sheet-in {
+  from {
+    transform: translateY(14px) scale(0.96);
+  }
+}
+
+/* the writing area: every row is one ruled line tall, and it scrolls a line at a time */
+.recipe-scroll {
+  position: absolute;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
+  line-height: var(--line);
+}
+
+.recipe-scroll > * {
+  scroll-snap-align: start;
+}
+
+.recipe-scroll input,
+.recipe-scroll textarea,
+.recipe-scroll select,
+.recipe-scroll button {
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: var(--line);
+  min-width: 0;
+}
+
+.recipe-scroll ::placeholder {
+  color: inherit;
+  opacity: 0.32;
+}
+
+.recipe-title {
+  display: block;
+  height: calc(var(--line) * 2);
+  line-height: calc(var(--line) * 2.3) !important;
+  font-weight: 300 !important;
+  letter-spacing: -0.02em;
+}
+
+.recipe-heading {
+  margin: 0;
+  height: var(--line);
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+/* between sections: a faint rule, centred in two lines of space */
+.recipe-divider {
+  position: relative;
+  height: calc(var(--line) * 2);
+}
+
+.recipe-divider::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid currentColor;
+  opacity: 0.22;
+}
+
+.recipe-ing,
+.recipe-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+}
+
+.recipe-ing {
+  height: var(--line);
+}
+
+.recipe-amount {
+  flex: 0 0 5.5em;
+}
+
+.recipe-name {
+  flex: 1;
+}
+
+/* the name and the kind of dish beside it */
+.recipe-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6em;
+  height: calc(var(--line) * 2);
+}
+
+.recipe-head .recipe-title {
+  flex: 1;
+}
+
+/* a little tag you can change */
+.recipe-pill {
+  flex: none;
+  -webkit-appearance: none;
+  appearance: none;
+  height: calc(var(--line) * 0.76) !important;
+  margin-bottom: calc(var(--line) * 0.12) !important;
+  padding: 0 0.9em !important;
+  border-radius: 999px;
+  line-height: calc(var(--line) * 0.76) !important;
+  cursor: pointer;
+  background: color-mix(in srgb, currentColor 9%, transparent) !important;
+}
+
+.recipe-pill.is-empty {
+  color: color-mix(in srgb, currentColor 45%, transparent) !important;
+}
+
+.recipe-row {
+  display: flex;
+  align-items: center;
+  height: var(--line);
+}
+
+.recipe-details {
+  gap: 0.45em;
+}
+
+.recipe-label {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.recipe-details .recipe-label:not(:first-child) {
+  margin-left: 0.9em;
+}
+
+.recipe-faint {
+  opacity: 0.45;
+}
+
+.recipe-minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+/* a short blank to fill in, underlined so it reads as one */
+.recipe-scroll .recipe-small {
+  width: 2.6em;
+  text-align: center;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  line-height: 1.4;
+}
+
+.recipe-rating {
+  gap: 0.1em;
+}
+
+.recipe-rating button {
+  font-size: 1.15em;
+  cursor: pointer;
+  color: color-mix(in srgb, currentColor 20%, transparent) !important;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.recipe-rating button.is-on {
+  color: #e8a33d !important;
+}
+
+.recipe-rating button:hover {
+  transform: scale(1.15);
+}
+
+/* how much to make */
+.recipe-scales {
+  display: inline-flex;
+  gap: 0.35em;
+  margin-left: auto;
+}
+
+.recipe-chip {
+  cursor: pointer;
+}
+
+.recipe-chip span {
+  display: block;
+  padding: 0.2em 0.7em;
+  border-radius: 999px;
+  font-size: 0.78em;
+  line-height: 1.2;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.recipe-chip:hover span {
+  opacity: 0.9;
+}
+
+.recipe-chip.is-on span {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border-color: transparent;
+}
+
+/* tick off what you've got */
+.recipe-scroll .recipe-check {
+  flex: 0 0 auto;
+  width: 0.95em;
+  height: 0.95em;
+  margin-top: calc((var(--line) - 0.95em) / 2);
+  margin-right: 0.15em;
+  border: 1.5px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 0.25em;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.recipe-check[aria-checked='true'] {
+  background: currentColor !important;
+  border-color: transparent !important;
+}
+
+.recipe-check[aria-checked='true']::after {
+  content: '';
+  width: 0.28em;
+  height: 0.5em;
+  margin-top: -0.1em;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.recipe-ing.is-checked .recipe-amount,
+.recipe-ing.is-checked .recipe-name {
+  text-decoration: line-through;
+  opacity: 0.45;
+}
+
+.recipe-num {
+  flex: 0 0 1.3em;
+}
+
+.recipe-step-text {
+  flex: 1;
+  resize: none;
+  overflow: hidden;
+}
+
+.recipe-remove {
+  flex: 0 0 1em;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.recipe-ing:hover .recipe-remove,
+.recipe-step:hover .recipe-remove,
+.recipe-ing:focus-within .recipe-remove,
+.recipe-step:focus-within .recipe-remove {
+  opacity: 0.45;
+}
+
+.recipe-remove:hover {
+  opacity: 0.9 !important;
+}
+
+.recipe-add {
+  display: flex;
+  align-items: center;
+  height: var(--line);
+  cursor: pointer;
+}
+
+/* a small pill, so it reads as a button */
+.recipe-add span {
+  padding: 0.25em 0.8em;
+  border-radius: 999px;
+  border: 1px dashed currentColor;
+  font-size: 0.78em;
+  line-height: 1.2;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.recipe-add:hover span {
+  opacity: 0.85;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.recipe-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.recipe-close:hover {
+  opacity: 1;
+}
+
 /* ---------- How it works: a glass card that folds into a ? button ---------- */
 .help {
   position: fixed;
@@ -491,9 +845,10 @@ body {
   height: 26px;
 }
 
-.help-icon .icon-paper {
-  width: 21px;
-  height: 21px;
+.help-icon .help-note {
+  width: 23px;
+  height: 23px;
+  rotate: -4deg;
 }
 
 .help-done {
