@@ -20,6 +20,8 @@ import type { PaperData } from './PaperNote'
 const LINE_PX = 30
 /** Space between the writing and every edge of the sheet (world units) */
 const PAD = 0.03
+/** Width of the (faint) scrollbar, which sits at the sheet's right edge */
+const SCROLLBAR = 6
 /** Where a ruled line falls: rows start here plus a whole number of lines */
 const ROW_ORIGIN = 0.05 - 0.024 * 0.8
 /** How much to make: amounts and servings show multiplied (what's saved stays as written) */
@@ -155,7 +157,9 @@ export default function RecipeEditor({
           className="recipe-scroll"
           style={{
             left: px(left),
-            right: px(PAD),
+            // runs to the sheet's edge so the scrollbar sits out there, past the close button
+            right: 0,
+            paddingRight: px(PAD) - SCROLLBAR,
             top: px(top),
             bottom: px(PAD),
             fontSize: px(L.bodySize),
@@ -214,9 +218,6 @@ export default function RecipeEditor({
             <Minutes value={r.cook} onChange={(cook) => set({ cook })} />
             <span className="recipe-label">total</span>
             <span className={total ? '' : 'recipe-faint'}>{total || '–'}</span>
-          </div>
-
-          <div className="recipe-row recipe-details">
             <span className="recipe-label">serves</span>
             <input
               className="recipe-small"
@@ -228,13 +229,14 @@ export default function RecipeEditor({
               aria-label="serves"
               onChange={(e) => set({ serves: e.target.value })}
             />
-            <span className="recipe-scales">
+          </div>
+
+          <div className="recipe-row recipe-scales">
               {SCALES.map(([k, label]) => (
                 <button key={k} className={`recipe-chip${scale === k ? ' is-on' : ''}`} onClick={() => setScale(k)}>
                   <span>{label}</span>
                 </button>
               ))}
-            </span>
           </div>
 
           <div className="recipe-divider" />

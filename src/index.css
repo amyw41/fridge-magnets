@@ -453,9 +453,29 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-snap-type: y mandatory;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.18) transparent;
   line-height: var(--line);
+}
+
+/* a faint, see-through scrollbar that only darkens when you're over the note */
+.recipe-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.recipe-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.recipe-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: transparent;
+}
+
+.recipe-sheet:hover .recipe-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+.recipe-scroll::-webkit-scrollbar-button {
+  display: none;
 }
 
 .recipe-scroll > * {
@@ -538,7 +558,8 @@ body {
 /* the name and the kind of dish beside it */
 .recipe-head {
   display: flex;
-  align-items: flex-end;
+  /* the tag's words sit on the same line as the name's */
+  align-items: baseline;
   gap: 0.6em;
   height: calc(var(--line) * 2);
 }
@@ -552,11 +573,10 @@ body {
   flex: none;
   -webkit-appearance: none;
   appearance: none;
-  height: calc(var(--line) * 0.76) !important;
-  margin-bottom: calc(var(--line) * 0.12) !important;
-  padding: 0 0.9em !important;
+  height: calc(var(--line) * 0.9) !important;
+  padding: 0 1.15em !important;
   border-radius: 999px;
-  line-height: calc(var(--line) * 0.76) !important;
+  line-height: calc(var(--line) * 0.9) !important;
   cursor: pointer;
   background: color-mix(in srgb, currentColor 9%, transparent) !important;
 }
@@ -626,9 +646,7 @@ body {
 
 /* how much to make */
 .recipe-scales {
-  display: inline-flex;
-  gap: 0.35em;
-  margin-left: auto;
+  gap: 0.5em;
 }
 
 .recipe-chip {
@@ -637,7 +655,7 @@ body {
 
 .recipe-chip span {
   display: block;
-  padding: 0.2em 0.7em;
+  padding: 0.35em 1.1em;
   border-radius: 999px;
   font-size: 0.78em;
   line-height: 1.2;
@@ -728,7 +746,7 @@ body {
 
 /* a small pill, so it reads as a button */
 .recipe-add span {
-  padding: 0.25em 0.8em;
+  padding: 0.35em 1.1em;
   border-radius: 999px;
   border: 1px dashed currentColor;
   font-size: 0.78em;

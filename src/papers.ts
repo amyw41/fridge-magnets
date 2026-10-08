@@ -518,7 +518,7 @@ export async function writtenPaperCanvas(kind: PaperKind, style: PaperStyleId, r
 }
 
 /** Editor sheets are at least this big (world units), so small notes still have room to write */
-export const SHEET_MIN: [number, number] = [0.4, 0.5]
+export const SHEET_MIN: [number, number] = [0.5, 0.52]
 
 const backgrounds = new Map<string, string>()
 /** The note's paper, at the editor's (roomier) size, as an image */
