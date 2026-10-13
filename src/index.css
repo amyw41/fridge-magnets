@@ -355,6 +355,9 @@ body {
   flex-direction: column;
   padding: 6px;
   min-width: 100%;
+  border-radius: 16px;
+  /* grows down out of the share button */
+  transform-origin: 30% -8px;
 }
 
 .share-menu::before {
@@ -362,7 +365,7 @@ body {
   position: absolute;
   inset: 0;
   z-index: -1;
-  border-radius: 16px;
+  border-radius: inherit;
   background: var(--glass);
   border: 1px solid var(--glass-edge);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
@@ -1338,12 +1341,13 @@ body {
   position: absolute;
   left: calc(100% + 14px);
   top: 50%;
-  transform: translateY(-50%);
+  translate: 0 -50%;
   isolation: isolate;
   width: 264px;
   padding: 14px;
   border-radius: 20px;
-  animation: panel-in 0.18s ease-out;
+  /* grows out of the sidebar button beside it */
+  transform-origin: -14px 50%;
 }
 
 /* Invisible bridge so the panel stays open while the cursor crosses the gap */
@@ -1356,15 +1360,81 @@ body {
   height: 100%;
 }
 
-@keyframes panel-in {
+/*
+ * Liquid glass pop-ups (the fridge menu, the sidebar panels, share): like iOS,
+ * each one swells out of where it came from as a round glass drop, overshoots
+ * and wobbles into its shape, and only then do its contents fade in. The glass
+ * itself is brighter and clearer than the plain frost, with a lit top edge.
+ */
+.fridge-menu,
+.tool-panel,
+.share-menu {
+  animation: liquid-pop 0.6s cubic-bezier(0.22, 0.9, 0.3, 1) both;
+}
+
+.fridge-menu > *,
+.tool-panel > *,
+.share-menu > * {
+  animation: liquid-content 0.32s ease-out 0.14s backwards;
+}
+
+@keyframes liquid-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.18);
+    border-radius: 999px;
+  }
+  30% {
+    opacity: 1;
+  }
+  55% {
+    transform: scale(1.035, 0.97);
+  }
+  78% {
+    transform: scale(0.99, 1.012);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes liquid-content {
   from {
     opacity: 0;
-    transform: translate(-6px, -50%);
+    transform: scale(0.97);
   }
+}
 
-  to {
-    opacity: 1;
-    transform: translate(0, -50%);
+.tool-panel::before,
+.fridge-menu::before,
+.share-menu::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(232, 232, 238, 0.42));
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px rgba(60, 50, 70, 0.06),
+    0 14px 40px rgba(40, 30, 50, 0.14),
+    0 2px 6px rgba(40, 30, 50, 0.06);
+  -webkit-backdrop-filter: blur(24px) saturate(1.9) brightness(1.04);
+  backdrop-filter: blur(24px) saturate(1.9) brightness(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fridge-menu,
+  .tool-panel,
+  .share-menu {
+    animation: liquid-fade 0.15s ease-out both;
+  }
+  .fridge-menu > *,
+  .tool-panel > *,
+  .share-menu > * {
+    animation: none;
+  }
+}
+
+@keyframes liquid-fade {
+  from {
+    opacity: 0;
   }
 }
 
@@ -1556,14 +1626,8 @@ body {
   isolation: isolate;
   padding: 14px;
   border-radius: 20px;
-  animation: fridge-menu-in 0.18s ease-out;
-}
-
-@keyframes fridge-menu-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
+  /* grows out of the spot that was clicked (set by FridgeMenu) */
+  transform-origin: var(--ox, 0) var(--oy, 50%);
 }
 
 .fridge-menu .tool-panel-title+* {

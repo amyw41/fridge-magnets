@@ -64,7 +64,14 @@ export default function FridgeMenu({
   }, [look.color])
 
   return (
-    <div ref={ref} className="fridge-menu" style={{ left: pos.x, top: pos.y }} role="dialog" aria-label="Customize fridge">
+    <div
+      ref={ref}
+      className="fridge-menu"
+      // --ox/--oy: the click, relative to the menu, so it grows out of that spot
+      style={{ left: pos.x, top: pos.y, ['--ox' as string]: `${at.x - pos.x}px`, ['--oy' as string]: `${at.y - pos.y}px` }}
+      role="dialog"
+      aria-label="Customize fridge"
+    >
       <p className="tool-panel-title">style</p>
       <div className="fridge-styles">
         {FRIDGE_MODELS.map((m) => {
