@@ -207,7 +207,7 @@ export default function RecipeEditor({
               ))}
             </div>
             <Fact label="serves" end>
-              <span className="recipe-unit">
+              <label className="recipe-unit">
                 <input
                   value={scaled ? scaleAmount(r.serves, scale) : r.serves}
                   readOnly={scaled}
@@ -218,8 +218,8 @@ export default function RecipeEditor({
                   size={Math.max(1, (scaled ? scaleAmount(r.serves, scale) : r.serves).length)}
                   onChange={(e) => set({ serves: e.target.value })}
                 />
-                <span className={r.serves ? '' : 'recipe-faint'}>people</span>
-              </span>
+                <span>people</span>
+              </label>
             </Fact>
           </div>
 
@@ -292,7 +292,7 @@ export default function RecipeEditor({
 
           <label className="recipe-notes">
             <span className="recipe-label">extra notes</span>
-            <AutoText id="notes" value={r.notes} maxLength={2000} placeholder="" onChange={(notes) => set({ notes })} />
+            <BulletText value={r.notes} onChange={(notes) => set({ notes })} />
           </label>
         </div>
         <button className="recipe-close" aria-label="close" onClick={done}>
@@ -318,7 +318,7 @@ function Fact({ label, end, children }: { label: string; end?: boolean; children
 /** A time in minutes */
 function Minutes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <span className="recipe-unit">
+    <label className="recipe-unit">
       <input
         value={value}
         maxLength={4}
@@ -328,7 +328,7 @@ function Minutes({ value, onChange }: { value: string; onChange: (v: string) => 
         onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))}
       />
       <span className={value ? '' : 'recipe-faint'}>min</span>
-    </span>
+    </label>
   )
 }
 
@@ -363,6 +363,59 @@ function AutoText({
       maxLength={maxLength}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+    />
+  )
+}
+
+const BULLET = '• '
+const unbullet = (s: string) => s.split('\n').map((l) => l.replace(/^•\s?/, '')).join('\n')
+
+/** Notes as a bulleted list: every line shows a bullet, but the notes are saved as plain lines */
+function BulletText({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const caret = useRef<number | null>(null)
+  const shown = value ? value.split('\n').map((l) => BULLET + l).join('\n') : ''
+  useLayoutEffect(() => {
+    const t = ref.current!
+    t.style.height = '0px'
+    t.style.height = `${t.scrollHeight}px`
+    if (caret.current !== null) {
+      t.setSelectionRange(caret.current, caret.current)
+      caret.current = null
+    }
+  })
+  // `text` as typed (bullets and all), `at` the caret in it
+  const update = (text: string, at: number) => {
+    const plain = unbullet(text).slice(0, 2000)
+    // the caret, once every line has its bullet back
+    const before = unbullet(text.slice(0, at))
+    caret.current = plain ? before.length + before.split('\n').length * BULLET.length : 0
+    onChange(plain)
+  }
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    const t = e.currentTarget
+    const at = t.selectionStart
+    if (at !== t.selectionEnd) return
+    const lineStart = shown.lastIndexOf('\n', at - 1) + 1
+    if (e.key === 'Backspace' && at - lineStart <= BULLET.length) {
+      // backspacing into a bullet joins the line onto the one above (or clears an empty first line)
+      e.preventDefault()
+      if (lineStart > 0) update(shown.slice(0, lineStart - 1) + shown.slice(lineStart + BULLET.length), lineStart - 1)
+      else if (!value.split('\n')[0]) update(shown.slice(shown.indexOf('\n') + 1), 0)
+    } else if (e.key === 'Delete' && shown[at] === '\n') {
+      // deleting at a line's end pulls the next line up, without its bullet
+      e.preventDefault()
+      update(shown.slice(0, at) + shown.slice(at + 1 + BULLET.length), at)
+    }
+  }
+  return (
+    <textarea
+      ref={ref}
+      data-focus="notes"
+      rows={1}
+      value={shown}
+      onChange={(e) => update(e.target.value, e.target.selectionStart)}
       onKeyDown={onKeyDown}
     />
   )

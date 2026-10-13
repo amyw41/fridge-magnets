@@ -5,13 +5,14 @@ import { LOAD_IN, MAGNET_CONFIG as M } from '../fridgeStyle'
 import { prefersReducedMotion } from '../motion'
 import { GOLD, ROSE_GOLD, SILVER } from '../palette'
 import { isOnDoor, MAGNET_SIZE, type MagnetData, type MagnetFinish, type MagnetShape } from '../magnetLayout'
+import { doorFront } from '../fridgeModels'
 import { isOverTrash, setTrashState } from '../trash'
 import { panKey } from './CameraRig'
-import { DOOR_Z } from './Fridge'
 
 const THICKNESS = M.thickness * MAGNET_SIZE
-const REST_Z = DOOR_Z + THICKNESS / 2
-const SHADOW_Z = DOOR_Z + 0.0015
+/** Centre's distance out from the fridge when resting on it */
+const REST_OFF = THICKNESS / 2
+const SHADOW_OFF = 0.0015
 
 /** Unit-size outlines (about 1 wide), scaled to MAGNET_SIZE after extruding. */
 function makeShape(shape: MagnetShape): THREE.Shape {
@@ -309,22 +310,26 @@ export default function Magnet({
   const dragging = useRef(false)
   const hovered = useRef(false)
   const ray = useRef(new THREE.Ray())
-  const grabOffset = useRef(new THREE.Vector2()) // magnet centre minus grab point, on the door plane
+  // Where it is now, [s, y] round the fridge (see fridgeSurface), and how far out
+  const at = useRef({ s: data.position[0], y: data.position[1] })
+  const off = useRef(REST_OFF)
+  const grabOffset = useRef(new THREE.Vector2()) // magnet centre minus grab point, in [s, y]
   const grabDz = useRef(0) // grab point's height above the magnet centre
   const lift = useRef(0) // 0 = flat on door, 1 = fully lifted
+  const spin = (((data.id * 137) % 61) - 30) * (Math.PI / 180)
 
   /**
    * Keeps the exact grabbed point under the cursor: intersects the pointer ray
-   * with the plane that point currently sits on. Called on every pointer event
-   * as well as every frame, so the position is never a frame behind.
+   * with the fridge's outside, raised to where that point currently sits.
+   * Called on every pointer event as well as every frame, so the position is
+   * never a frame behind. Off the fridge (or edge-on) it waits at the edge.
    */
   const followPointer = () => {
-    const g = ref.current
-    const { origin: o, direction: d } = ray.current
-    if (d.z > -1e-3) return
-    const t = (g.position.z + grabDz.current - o.z) / d.z
-    g.position.x = o.x + d.x * t + grabOffset.current.x
-    g.position.y = o.y + d.y * t + grabOffset.current.y
+    const surface = doorFront().surface
+    const hit = surface.hit(ray.current, off.current + grabDz.current)
+    if (!hit) return
+    at.current.s = surface.wrap(hit.s + grabOffset.current.x)
+    at.current.y = hit.y + grabOffset.current.y
   }
 
   const endDrag = (e: ThreeEvent<PointerEvent>) => {
@@ -337,20 +342,25 @@ export default function Magnet({
     setCursor(hovered.current ? 'grab' : 'auto')
     setTrashState(false, false)
     if (isOverTrash(e.nativeEvent.clientX, e.nativeEvent.clientY)) onTrash(data.id)
-    else onDrop(data.id, ref.current.position.x, ref.current.position.y)
+    else onDrop(data.id, at.current.s, at.current.y)
   }
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    // Space+drag pans the view; and only grab when facing the door, since
-    // edge-on rays make the door-plane projection unstable
-    if (panKey.held || e.button !== 0 || e.ray.direction.z > -0.25) return
+    // Space+drag pans the view; and only grab when facing it, since edge-on
+    // the pointer can't tell where on the fridge it is
+    const surface = doorFront().surface
+    const face = surface.point(at.current.s)
+    const dir = e.ray.direction
+    if (panKey.held || e.button !== 0 || dir.x * Math.sin(face.angle) + dir.z * Math.cos(face.angle) > -0.25) return
     e.stopPropagation()
     ;(e.target as Element).setPointerCapture(e.pointerId)
     // Disable orbiting now, before OrbitControls sees this same pointerdown
     if (controls) controls.enabled = false
-    const g = ref.current
-    grabOffset.current.set(g.position.x - e.point.x, g.position.y - e.point.y)
-    grabDz.current = e.point.z - g.position.z
+    const s = surface.toS(e.point.x, e.point.z)
+    const base = surface.point(s)
+    grabOffset.current.set(surface.wrap(at.current.s - s), at.current.y - e.point.y)
+    grabDz.current =
+      (e.point.x - base.x) * Math.sin(base.angle) + (e.point.z - base.z) * Math.cos(base.angle) - off.current
     ray.current.copy(e.ray)
     dragging.current = true
     onDragChange(true)
@@ -378,28 +388,31 @@ export default function Magnet({
     g.scale.setScalar(Math.max(1e-3, easeOutBack(appear))) // never exactly 0: raycasting needs an invertible matrix
 
     lift.current += ((dragging.current ? 1 : 0) - lift.current) * k
-    g.position.z = REST_Z + lift.current * M.liftHeight + (1 - appear) * M.liftHeight * 2
+    off.current = REST_OFF + lift.current * M.liftHeight + (1 - appear) * M.liftHeight * 2
+    const surface = doorFront().surface
+    const now = at.current
 
     if (dragging.current) {
-      followPointer() // the lift changes the grab plane even if the pointer is still
+      followPointer() // the lift changes the grab height even if the pointer is still
     } else {
-      g.position.x += (data.position[0] - g.position.x) * k
-      g.position.y += (data.position[1] - g.position.y) * k
+      now.s = surface.wrap(now.s + surface.wrap(data.position[0] - now.s) * k)
+      now.y += (data.position[1] - now.y) * k
     }
+    // Stand it on the fridge there, facing out
+    const p = surface.point(now.s, off.current)
+    g.position.set(p.x, now.y, p.z)
+    g.rotation.set(0, p.angle, spin)
 
     // Contact shadow: grows, softens and drifts away from the light as it lifts;
     // hidden when the magnet is held off the door
     const sh = shadowRef.current
     const l = lift.current
     const scale = THREE.MathUtils.lerp(M.shadow.restScale, M.shadow.liftScale, l) * MAGNET_SIZE
-    sh.position.set(
-      g.position.x - l * M.liftHeight * 0.4,
-      g.position.y - MAGNET_SIZE * 0.06 - l * M.liftHeight * 0.7,
-      SHADOW_Z,
-    )
-    sh.rotation.z = g.rotation.z
+    const q = surface.point(now.s - l * M.liftHeight * 0.4, SHADOW_OFF)
+    sh.position.set(q.x, now.y - MAGNET_SIZE * 0.06 - l * M.liftHeight * 0.7, q.z)
+    sh.rotation.set(0, q.angle, spin)
     sh.scale.set(scale * appear, scale * appear, 1)
-    const onDoor = isOnDoor(g.position.x, g.position.y) ? 1 : 0
+    const onDoor = isOnDoor(now.s, now.y) ? 1 : 0
     shadowMaterial.opacity = THREE.MathUtils.lerp(M.shadow.restOpacity, M.shadow.liftOpacity, l) * onDoor * appear
   })
 
@@ -408,11 +421,7 @@ export default function Magnet({
       <mesh ref={shadowRef} material={shadowMaterial} renderOrder={1000}>
         <planeGeometry />
       </mesh>
-      <group
-        ref={ref}
-        position={[data.position[0], data.position[1], REST_Z]}
-        rotation={[0, 0, (((data.id * 137) % 61) - 30) * (Math.PI / 180)]}
-      >
+      <group ref={ref}>
         <mesh
           geometry={geometry}
           onPointerDown={onDown}

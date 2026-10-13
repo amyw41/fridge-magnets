@@ -6,6 +6,7 @@
  * so they can never straddle a gap between doors.
  */
 import { FRIDGE_STYLE as S } from './fridgeStyle'
+import { FridgeSurface } from './fridgeSurface'
 import { PALETTE } from './palette'
 
 export type FridgeFinish = 'enamel' | 'steel' | 'satin'
@@ -179,27 +180,32 @@ export function bodyMaterial(finish: FridgeFinish) {
 
 export const HANDLE_RADIUS = 0.032
 
-/** Things on the front a magnet can't overlap, in door-plane (x, y) coordinates */
+/** Things a magnet can't overlap, in surface [s, y] coordinates (see fridgeSurface) */
 export type Obstacle =
   | { kind: 'rect'; x: number; y: number; hw: number; hh: number }
   | { kind: 'circle'; x: number; y: number; r: number }
 
 export interface DoorFront {
+  /** Door faces on the front */
   doors: Rect[]
+  /** Everywhere a magnet can sit: the doors, both sides and the back */
+  panels: Rect[]
   obstacles: Obstacle[]
+  /** The whole outside, unrolled */
+  surface: FridgeSurface
 }
 
 function frontOf(model: FridgeModel): DoorFront {
   const m = 0.012 // keep clear of the door's rounded edge
-  return {
-    doors: model.doors.map((d) => ({ ...d, x0: d.x0 + m, x1: d.x1 - m, y0: d.y0 + m, y1: d.y1 - m })),
-    obstacles: model.handles.map((h) => {
-      const long = h.length / 2 + HANDLE_RADIUS
-      return h.dir === 'h'
-        ? { kind: 'rect', x: h.x, y: h.y, hw: long, hh: HANDLE_RADIUS }
-        : { kind: 'rect', x: h.x, y: h.y, hw: HANDLE_RADIUS, hh: long }
-    }),
-  }
+  const doors = model.doors.map((d) => ({ ...d, x0: d.x0 + m, x1: d.x1 - m, y0: d.y0 + m, y1: d.y1 - m }))
+  const surface = new FridgeSurface(model, doors)
+  const handles = model.handles.map((h): Obstacle => {
+    const long = h.length / 2 + HANDLE_RADIUS
+    return h.dir === 'h'
+      ? { kind: 'rect', x: h.x, y: h.y, hw: long, hh: HANDLE_RADIUS }
+      : { kind: 'rect', x: h.x, y: h.y, hw: HANDLE_RADIUS, hh: long }
+  })
+  return { doors, panels: [...doors, ...surface.panels], obstacles: [...handles, ...surface.obstacles], surface }
 }
 
 // The fridge currently on screen. Magnet and note placement read this.

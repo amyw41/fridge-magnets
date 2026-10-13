@@ -159,7 +159,7 @@ function surface(style: PaperStyleId, ctx: Ctx, w: number, h: number) {
       fill('#f6f4ef')
       lines(ctx, w, 0.05 * u, h, 0.024 * u, '#a9c6e8', 2.5)
       ctx.fillStyle = '#ec8f95'
-      ctx.fillRect(0.055 * u, 0, 3, h)
+      ctx.fillRect(0.02 * u, 0, 3, h) // out by the edge, clear of the writing
       grain(ctx, w, h, 0.035, 12)
       break
     case 'grid': {
@@ -388,7 +388,7 @@ const RULE_FIRST = 0.05
 export function recipeLayout(kind: PaperKind, style: PaperStyleId, [w, h] = paperDesign(kind).size) {
   // below the torn edge / zigzag, and clear of the margin rule on lined paper
   const top = kind === 'notebook' || kind === 'grid' || kind === 'receipt' ? 0.024 : 0.008
-  const left = style === 'lined' ? 0.07 : 0.022
+  const left = style === 'lined' ? 0.04 : 0.022
   const right = w - 0.022
   const bottom = h - (kind === 'receipt' || kind === 'kraft' || kind === 'notebook' || kind === 'grid' ? 0.035 : 0.02)
   // rows on the lined-paper grid; the title takes the first one with room above it
@@ -462,7 +462,11 @@ function recipeLines(ctx: Ctx, r: Recipe, width: number, bodyFont: string, headF
   }
   if (r.notes.trim()) {
     section('NOTES')
-    for (const para of r.notes.trim().split('\n')) for (const l of wrap(ctx, para, width)) out.push({ text: l, font: bodyFont })
+    // one bullet per line, wrapped lines tucked in under the first
+    const dot = '• '
+    const indent = ctx.measureText(dot).width
+    for (const para of r.notes.split('\n').filter((l) => l.trim()))
+      wrap(ctx, para.trim(), width - indent).forEach((l, j) => out.push({ text: j ? l : dot + l, font: bodyFont, indent: j ? indent : 0 }))
   }
   return out
 }
@@ -559,24 +563,61 @@ export function paperThumb(kind: PaperKind, style: PaperStyleId = 'lined') {
 }
 
 /**
- * Where a note let go at (x, y) comes to rest: slid fully onto the nearest
- * door it fits on (never across a gap between doors), or null if it was let
- * go off the front entirely.
+ * Where a note let go at [s, y] comes to rest, or null if it was let go off
+ * the fridge. On the front it stays on one door's height and never across
+ * the gap between two doors, but past the fridge's own edge it wraps round
+ * the corner onto the side. On the sides and back it keeps clear of the
+ * coils and label plate.
  */
-export function placePaper(kind: PaperKind, x: number, y: number): [number, number] | null {
-  const doors = doorFront().doors
-  if (!doors.some((d) => distToRect(d, x, y) < 0.05)) return null
+export function placePaper(kind: PaperKind, s: number, y: number): [number, number] | null {
+  const { doors, obstacles, surface } = doorFront()
+  if (!surface.onSurface(s, y)) return null
+  s = surface.wrap(s)
   const [w, h] = paperDesign(kind).size
   const m = 0.02 // margin, which also covers the slight tilt
   const hw = w / 2 + m
   const hh = h / 2 + m
-  const fits = doors.filter((d) => d.x1 - d.x0 >= hw * 2 && d.y1 - d.y0 >= hh * 2)
-  const pool = fits.length ? fits : doors
-  const door = pool.reduce((a, b) => (distToRect(b, x, y) < distToRect(a, x, y) ? b : a))
   const clamp = (v: number, a: number, b: number) => (a > b ? (a + b) / 2 : Math.min(Math.max(v, a), b))
-  // keep in from big rounded corners: inset the top/bottom edge by the roundest corner on that side
-  const [tl, tr, br, bl] = door.corners ?? [0, 0, 0, 0]
-  const top = Math.max(tl, tr) * 0.3
-  const bottom = Math.max(bl, br) * 0.3
-  return [clamp(x, door.x0 + hw, door.x1 - hw), clamp(y, door.y0 + hh + bottom, door.y1 - hh - top)]
+  const [band0, band1] = surface.sideBand
+
+  if (Math.abs(s) - hw < surface.frontHalf) {
+    const fits = doors.filter((d) => d.y1 - d.y0 >= hh * 2)
+    const pool = fits.length ? fits : doors
+    const door = pool.reduce((a, b) => (distToRect(b, s, y) < distToRect(a, s, y) ? b : a))
+    // a door edge at the fridge's own edge lets it wrap round; one at a gap stops it
+    const outer = surface.frontHalf - 0.05
+    const lo = door.x0 <= -outer ? -Infinity : door.x0 + hw
+    const hi = door.x1 >= outer ? Infinity : door.x1 - hw
+    // keep in from big rounded corners: inset the top/bottom edge by the roundest corner on that side
+    const [tl, tr, br, bl] = door.corners ?? [0, 0, 0, 0]
+    let y0 = door.y0 + hh + Math.max(bl, br) * 0.3
+    let y1 = door.y1 - hh - Math.max(tl, tr) * 0.3
+    if (lo === -Infinity || hi === Infinity) {
+      y0 = Math.max(y0, band0 + hh)
+      y1 = Math.min(y1, band1 - hh)
+    }
+    return [clamp(s, lo, hi), clamp(y, y0, y1)]
+  }
+
+  // Sides and back
+  const blocked = ([ps, py]: [number, number]) =>
+    obstacles.some(
+      (o) => o.kind === 'rect' && Math.abs(surface.wrap(ps - o.x)) < o.hw + hw && Math.abs(py - o.y) < o.hh + hh,
+    )
+  const spot: [number, number] = [s, clamp(y, band0 + hh, band1 - hh)]
+  if (!blocked(spot)) return spot
+  const tries: [number, number][] = obstacles.flatMap((o) =>
+    o.kind === 'rect'
+      ? [
+          [spot[0], o.y + o.hh + hh] as [number, number],
+          [spot[0], o.y - o.hh - hh] as [number, number],
+          [surface.wrap(o.x - o.hw - hw), spot[1]] as [number, number],
+          [surface.wrap(o.x + o.hw + hw), spot[1]] as [number, number],
+        ]
+      : [],
+  )
+  const ok = tries.filter(([, py]) => py >= band0 + hh && py <= band1 - hh).filter((q) => !blocked(q))
+  if (!ok.length) return null
+  const dist = ([ps, py]: [number, number]) => Math.hypot(surface.wrap(ps - spot[0]), py - spot[1])
+  return ok.reduce((a, b) => (dist(b) < dist(a) ? b : a))
 }

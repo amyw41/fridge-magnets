@@ -20,7 +20,7 @@ import { CAMERA_CONFIG, FRIDGE_STYLE, LOAD_IN } from './fridgeStyle'
 import { layoutIntro, type IntroPose } from './introLayout'
 import { placePaper, type PaperKind, type PaperStyleId } from './papers'
 import { SILVER } from './palette'
-import { DEFAULT_LOOK, doorCentre, setDoorFront, type FridgeLook } from './fridgeModels'
+import { DEFAULT_LOOK, doorCentre, doorFront, setDoorFront, type FridgeLook } from './fridgeModels'
 import { fridgeLink, saveFridge, savedFridge } from './fridgeSave'
 import { resolveDrop, type MagnetData } from './magnetLayout'
 
@@ -132,16 +132,17 @@ export default function App() {
     })
   }, [])
 
-  // Things dragged out of the menu land where the cursor points on the door
+  // Things dragged out of the menu land where the cursor points on the fridge, whichever side
   const three = useRef<RootState | null>(null)
   const doorPoint = useCallback((clientX: number, clientY: number) => {
     const st = three.current
-    if (!st || st.camera.position.z <= DOOR_Z) return null // looking from behind: the door isn't there
+    if (!st) return null
     const r = st.gl.domElement.getBoundingClientRect()
     const ndc = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1)
     const ray = new THREE.Raycaster()
     ray.setFromCamera(ndc, st.camera)
-    return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -DOOR_Z), new THREE.Vector3())
+    const hit = doorFront().surface.hit(ray.ray, 0)
+    return hit && { x: hit.s, y: hit.y }
   }, [])
 
   const dropMagnet = useCallback(
@@ -231,9 +232,16 @@ export default function App() {
   const changeLook = useCallback(
     (next: FridgeLook) => {
       if (next.model !== look.model) {
+        // keep things on the same face of the new fridge
+        const from = doorFront().surface
         setDoorFront(next.model)
+        const to = doorFront().surface
+        const moved = <T extends { position: [number, number] }>(o: T): T => ({
+          ...o,
+          position: [to.from(from, o.position[0]), o.position[1]],
+        })
         setMagnets((ms) =>
-          ms.reduce<MagnetData[]>((placed, m) => {
+          ms.map(moved).reduce<MagnetData[]>((placed, m) => {
             const spot =
               resolveDrop({ x: m.position[0], y: m.position[1] }, m.shape, placed) ??
               resolveDrop(doorCentre(), m.shape, placed)
@@ -241,7 +249,7 @@ export default function App() {
           }, []),
         )
         setPapers((ps) =>
-          ps.flatMap((p) => {
+          ps.map(moved).flatMap((p) => {
             const spot = placePaper(p.kind, p.position[0], p.position[1]) ?? placePaper(p.kind, doorCentre().x, doorCentre().y)
             return spot ? [{ ...p, position: spot }] : []
           }),

@@ -2,9 +2,10 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { hasRecipe, paperCanvas, paperDesign, recipeOf, writtenPaperCanvas, type PaperKind, type PaperStyleId, type Recipe } from '../papers'
+import { doorFront } from '../fridgeModels'
+import type { FridgeSurface, SurfacePoint } from '../fridgeSurface'
 import { isOverTrash, setTrashState } from '../trash'
 import { panKey } from './CameraRig'
-import { DOOR_Z } from './Fridge'
 
 /** A note, and the recipe written on it (if any) */
 export interface PaperData extends Partial<Recipe> {
@@ -12,15 +13,50 @@ export interface PaperData extends Partial<Recipe> {
   kind: PaperKind
   /** Printed colour; null keeps the paper's own */
   style: PaperStyleId
-  /** Centre on the door plane */
+  /** Centre [s, y] on the fridge's unrolled outside (see fridgeSurface) */
   position: [number, number]
   /** Slight turn, in radians, so notes don't look machine-placed */
   tilt: number
 }
 
 /** Just off the door: magnets sit on top of paper */
-const REST_Z = DOOR_Z + 0.004
+const REST_OFF = 0.004
+const SHADOW_OFF = 0.002
 const LIFT = 0.03
+/** Columns the note is split into, so it can bend round the fridge's corners */
+const BEND_SEGMENTS = 48
+
+/** A flat note of this size, with its flat layout kept to bend from */
+function makeSheet(w: number, h: number) {
+  const g = new THREE.PlaneGeometry(w, h, BEND_SEGMENTS, 4)
+  g.userData.flat = Float32Array.from(g.attributes.position.array)
+  return g
+}
+
+/**
+ * Lays the note on the fridge centred at [s, y], `off` out from it: each
+ * point of the flat sheet goes to its own spot round the surface, so a note
+ * across a corner wraps round it.
+ */
+const bendPoint: SurfacePoint = { x: 0, z: 0, angle: 0 }
+function layOn(g: THREE.BufferGeometry, surface: FridgeSurface, s: number, y: number, tilt: number, off: number, scale = 1) {
+  const flat = g.userData.flat as Float32Array
+  const pos = g.attributes.position
+  const nor = g.attributes.normal
+  const c = Math.cos(tilt) * scale
+  const sn = Math.sin(tilt) * scale
+  for (let i = 0; i < pos.count; i++) {
+    const lx = flat[i * 3]
+    const ly = flat[i * 3 + 1]
+    const p = surface.point(s + lx * c - ly * sn, off, bendPoint)
+    pos.setXYZ(i, p.x, y + lx * sn + ly * c, p.z)
+    nor.setXYZ(i, Math.sin(p.angle), 0, Math.cos(p.angle))
+  }
+  pos.needsUpdate = true
+  nor.needsUpdate = true
+  g.computeBoundingSphere()
+  g.computeBoundingBox()
+}
 
 // Soft shadow in the note's own shape (torn edges and all), one per design
 const shadowTextures = new Map<PaperKind, THREE.Texture>()
@@ -112,29 +148,36 @@ export default function PaperNote({
     [data.kind],
   )
 
+  const sheet = useMemo(() => makeSheet(w, h), [w, h])
+  const shadowSheet = useMemo(() => makeSheet(w * 1.3, h * 1.3), [w, h])
+
   const dragging = useRef(false)
   const hovered = useRef(false)
   const ray = useRef(new THREE.Ray())
+  // Where it is now, [s, y] round the fridge, and how far out
+  const at = useRef({ s: data.position[0], y: data.position[1] })
+  const off = useRef(REST_OFF)
   const grabOffset = useRef(new THREE.Vector2())
   const lift = useRef(0)
   const downAt = useRef({ x: 0, y: 0 })
 
   const followPointer = () => {
-    const m = ref.current
-    const { origin: o, direction: d } = ray.current
-    if (d.z > -1e-3) return
-    const t = (m.position.z - o.z) / d.z
-    m.position.x = o.x + d.x * t + grabOffset.current.x
-    m.position.y = o.y + d.y * t + grabOffset.current.y
+    const surface = doorFront().surface
+    const hit = surface.hit(ray.current, off.current)
+    if (!hit) return // off the fridge or edge-on: wait at the edge
+    at.current.s = surface.wrap(hit.s + grabOffset.current.x)
+    at.current.y = hit.y + grabOffset.current.y
   }
 
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (panKey.held || e.button !== 0 || e.ray.direction.z > -0.25) return
+    const surface = doorFront().surface
+    const face = surface.point(at.current.s)
+    const dir = e.ray.direction
+    if (panKey.held || e.button !== 0 || dir.x * Math.sin(face.angle) + dir.z * Math.cos(face.angle) > -0.25) return
     e.stopPropagation()
     ;(e.target as Element).setPointerCapture(e.pointerId)
     if (controls) controls.enabled = false
-    const m = ref.current
-    grabOffset.current.set(m.position.x - e.point.x, m.position.y - e.point.y)
+    grabOffset.current.set(surface.wrap(at.current.s - surface.toS(e.point.x, e.point.z)), at.current.y - e.point.y)
     downAt.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY }
     ray.current.copy(e.ray)
     dragging.current = true
@@ -162,40 +205,43 @@ export default function PaperNote({
     const { clientX: x, clientY: y } = e.nativeEvent
     if (isOverTrash(x, y)) onTrash(data.id)
     else if (Math.hypot(x - downAt.current.x, y - downAt.current.y) < 5) onOpen(data.id)
-    else onDrop(data.id, ref.current.position.x, ref.current.position.y)
+    else onDrop(data.id, at.current.s, at.current.y)
   }
 
   useFrame((_, dt) => {
     const m = ref.current
     const k = 1 - Math.exp(-dt * 16)
+    const surface = doorFront().surface
+    const now = at.current
     lift.current += ((dragging.current ? 1 : 0) - lift.current) * k
-    m.position.z = REST_Z + lift.current * LIFT
+    off.current = REST_OFF + lift.current * LIFT
     if (dragging.current) followPointer()
     else {
-      m.position.x += (data.position[0] - m.position.x) * k
-      m.position.y += (data.position[1] - m.position.y) * k
+      now.s = surface.wrap(now.s + surface.wrap(data.position[0] - now.s) * k)
+      now.y += (data.position[1] - now.y) * k
+    }
+    const l = lift.current
+    const key = [now.s, now.y, off.current, data.tilt, surface.perimeter].map((v) => v.toFixed(5)).join()
+    // re-bend only when it's moved (the sheets remember where they were laid)
+    if (sheet.userData.laid !== key) {
+      sheet.userData.laid = key
+      layOn(sheet, surface, now.s, now.y, data.tilt, off.current)
+      layOn(shadowSheet, surface, now.s - l * LIFT * 0.4, now.y - 0.006 - l * LIFT * 0.8, data.tilt, SHADOW_OFF, 1 + l * 0.06)
     }
     // Held notes draw over the whole pile
     const order = dragging.current ? 900 : 10 + stack * 2
     m.renderOrder = order + 1
-    const sh = shadowRef.current
-    sh.renderOrder = order
-    const l = lift.current
-    sh.position.set(m.position.x - l * LIFT * 0.4, m.position.y - 0.006 - l * LIFT * 0.8, DOOR_Z + 0.002)
-    sh.scale.setScalar(1 + l * 0.06)
+    shadowRef.current.renderOrder = order
     shadowMaterial.opacity = THREE.MathUtils.lerp(0.28, 0.2, l)
   })
 
   return (
     <>
-      <mesh ref={shadowRef} material={shadowMaterial} rotation={[0, 0, data.tilt]}>
-        <planeGeometry args={[w * 1.3, h * 1.3]} />
-      </mesh>
+      <mesh ref={shadowRef} geometry={shadowSheet} material={shadowMaterial} />
       <mesh
         ref={ref}
+        geometry={sheet}
         material={material}
-        position={[data.position[0], data.position[1], REST_Z]}
-        rotation={[0, 0, data.tilt]}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={endDrag}
@@ -209,9 +255,7 @@ export default function PaperNote({
           hovered.current = false
           if (!dragging.current) setCursor('auto')
         }}
-      >
-        <planeGeometry args={[w, h]} />
-      </mesh>
+      />
     </>
   )
 }

@@ -506,15 +506,21 @@ body {
   opacity: 0.32;
 }
 
+.recipe-fact.is-end ::placeholder {
+  opacity: 1;
+}
+
 /* small serif capitals over each part */
 .recipe-label {
   display: block;
   margin: 0;
-  font-family: var(--serif);
-  font-size: calc(var(--u) * 11);
-  font-weight: 300;
+  /* same as the sidebar's section titles (MAGNETS, PAPER): small Inter caps, a little faded */
+  font-family: var(--font-ui);
+  font-size: calc(var(--u) * 10);
+  font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
+  color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
 /* name and rating on the left, the kind of dish on the right */
@@ -609,7 +615,47 @@ body {
 }
 
 .recipe-category.is-empty select {
-  color: color-mix(in srgb, currentColor 80%, transparent);
+  color: inherit;
+}
+
+/* the open list: roomy, rounded, on the paper's colour (browsers that can style it) */
+.recipe-scroll .recipe-category select,
+.recipe-category select::picker(select) {
+  appearance: base-select;
+}
+
+.recipe-scroll .recipe-category select {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.recipe-category select::picker-icon,
+.recipe-category option::checkmark {
+  display: none;
+}
+
+.recipe-category select::picker(select) {
+  margin-top: calc(var(--u) * 6);
+  padding: calc(var(--u) * 6);
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: calc(var(--u) * 10);
+  background: #fbfaf7;
+  color: #2f2c48;
+  box-shadow: 0 10px 24px rgba(40, 20, 30, 0.16);
+}
+
+.recipe-category option {
+  padding: calc(var(--u) * 5) calc(var(--u) * 12);
+  border-radius: calc(var(--u) * 6);
+  cursor: pointer;
+}
+
+.recipe-category option:hover,
+.recipe-category option:focus-visible,
+.recipe-category option:checked {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  outline: none;
 }
 
 /* prep · cook · total ... how much to make ... serves */
@@ -635,11 +681,14 @@ body {
 .recipe-unit {
   display: inline-flex;
   gap: 0.3em;
+  /* the whole "# people" is clickable, not just the narrow number box */
+  cursor: text;
 }
 
 .recipe-unit input {
   text-align: inherit;
   field-sizing: content;
+  min-width: 1.5ch;
 }
 
 .recipe-scales {
@@ -656,12 +705,11 @@ body {
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent) !important;
   font-size: calc(var(--u) * 10) !important;
   cursor: pointer;
-  opacity: 0.45;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .recipe-chip:hover {
-  opacity: 0.8;
+  background: color-mix(in srgb, currentColor 5%, transparent) !important;
 }
 
 .recipe-chip.is-on {
