@@ -447,16 +447,21 @@ body {
   }
 }
 
-/* the writing area: every row is one ruled line tall, and it scrolls a line at a time */
+/* the writing area: the whole sheet, scrolling when a recipe runs long. Sizes are in
+   the design's units (--u), so it keeps its proportions at any size */
 .recipe-scroll {
   position: absolute;
+  inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scroll-snap-type: y mandatory;
-  line-height: var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 58) calc(var(--u) * 44) calc(var(--u) * 46) calc(var(--u) * 46);
+  font-size: calc(var(--u) * 11);
+  line-height: 1.45;
 }
 
-/* a faint, see-through scrollbar that only darkens when you're over the note */
+/* a faint, see-through scrollbar that only shows when you're over the note */
 .recipe-scroll::-webkit-scrollbar {
   width: 6px;
 }
@@ -478,10 +483,6 @@ body {
   display: none;
 }
 
-.recipe-scroll > * {
-  scroll-snap-align: start;
-}
-
 .recipe-scroll input,
 .recipe-scroll textarea,
 .recipe-scroll select,
@@ -493,7 +494,6 @@ body {
   background: transparent;
   color: inherit;
   font: inherit;
-  line-height: var(--line);
   min-width: 0;
 }
 
@@ -502,187 +502,237 @@ body {
   opacity: 0.32;
 }
 
-.recipe-title {
-  display: block;
-  height: calc(var(--line) * 2);
-  line-height: calc(var(--line) * 2.3) !important;
-  font-weight: 300 !important;
-  letter-spacing: -0.02em;
+.recipe-faint {
+  opacity: 0.32;
 }
 
-.recipe-heading {
+/* small serif capitals over each part */
+.recipe-label {
+  display: block;
   margin: 0;
-  height: var(--line);
-  font-size: 0.72em;
-  font-weight: 600;
+  font-family: var(--serif);
+  font-size: calc(var(--u) * 11);
+  font-weight: 300;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  opacity: 0.55;
 }
 
-/* between sections: a faint rule, centred in two lines of space */
-.recipe-divider {
-  position: relative;
-  height: calc(var(--line) * 2);
-}
-
-.recipe-divider::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  border-top: 1px solid currentColor;
-  opacity: 0.22;
-}
-
-.recipe-ing,
-.recipe-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4em;
-}
-
-.recipe-ing {
-  height: var(--line);
-}
-
-.recipe-amount {
-  flex: 0 0 5.5em;
-}
-
-.recipe-name {
-  flex: 1;
-}
-
-/* the name and the kind of dish beside it */
+/* name and rating on the left, the kind of dish on the right */
 .recipe-head {
   display: flex;
-  /* the tag's words sit on the same line as the name's */
-  align-items: baseline;
-  gap: 0.6em;
-  height: calc(var(--line) * 2);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--u) * 16);
 }
 
-.recipe-head .recipe-title {
+.recipe-head > div {
   flex: 1;
+  min-width: 0;
 }
 
-/* a little tag you can change */
-.recipe-pill {
-  flex: none;
-  -webkit-appearance: none;
-  appearance: none;
-  height: calc(var(--line) * 0.9) !important;
-  padding: 0 1.15em !important;
-  border-radius: 999px;
-  line-height: calc(var(--line) * 0.9) !important;
-  cursor: pointer;
-  background: color-mix(in srgb, currentColor 9%, transparent) !important;
-}
-
-.recipe-pill.is-empty {
-  color: color-mix(in srgb, currentColor 45%, transparent) !important;
-}
-
-.recipe-row {
-  display: flex;
-  align-items: center;
-  height: var(--line);
-}
-
-.recipe-details {
-  gap: 0.45em;
-}
-
-.recipe-label {
-  font-size: 0.72em;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  opacity: 0.55;
-}
-
-.recipe-details .recipe-label:not(:first-child) {
-  margin-left: 0.9em;
-}
-
-.recipe-faint {
-  opacity: 0.45;
-}
-
-.recipe-minutes {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-}
-
-/* a short blank to fill in, underlined so it reads as one */
-.recipe-scroll .recipe-small {
-  width: 2.6em;
-  text-align: center;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  line-height: 1.4;
+.recipe-scroll .recipe-title {
+  display: block;
+  width: 100%;
+  font-family: var(--serif);
+  font-size: calc(var(--u) * 36);
+  font-weight: 300;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
 }
 
 .recipe-rating {
-  gap: 0.1em;
+  display: flex;
+  gap: calc(var(--u) * 2);
+  margin-top: calc(var(--u) * 4);
 }
 
 .recipe-rating button {
-  font-size: 1.15em;
+  width: calc(var(--u) * 21);
+  height: calc(var(--u) * 21);
   cursor: pointer;
-  color: color-mix(in srgb, currentColor 20%, transparent) !important;
   transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.recipe-rating svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  opacity: 0.2;
 }
 
 .recipe-rating button.is-on {
   color: #e8a33d !important;
 }
 
+.recipe-rating button.is-on svg {
+  opacity: 1;
+}
+
 .recipe-rating button:hover {
-  transform: scale(1.15);
+  transform: scale(1.12);
 }
 
-/* how much to make */
-.recipe-scales {
-  gap: 0.5em;
-}
-
-.recipe-chip {
+.recipe-category {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 6);
+  height: calc(var(--u) * 25);
+  margin-top: calc(var(--u) * 12);
+  padding: 0 calc(var(--u) * 14) 0 calc(var(--u) * 12);
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-family: var(--serif);
+  font-size: calc(var(--u) * 14);
   cursor: pointer;
 }
 
-.recipe-chip span {
-  display: block;
-  padding: 0.35em 1.1em;
+.recipe-category svg {
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.recipe-scroll .recipe-category select {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.recipe-category.is-empty select {
+  color: color-mix(in srgb, currentColor 80%, transparent);
+}
+
+/* prep · cook · total ... how much to make ... serves */
+.recipe-facts {
+  display: flex;
+  align-items: flex-end;
+  gap: calc(var(--u) * 18);
+  margin-top: calc(var(--u) * 14);
+}
+
+.recipe-fact {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 3);
+  font-size: calc(var(--u) * 10);
+}
+
+.recipe-fact.is-end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.recipe-unit {
+  display: inline-flex;
+  gap: 0.3em;
+}
+
+.recipe-unit input {
+  text-align: inherit;
+  field-sizing: content;
+}
+
+.recipe-scales {
+  display: flex;
+  gap: calc(var(--u) * 4);
+  margin-left: auto;
+  margin-bottom: calc(var(--u) * 1);
+}
+
+.recipe-chip {
+  height: calc(var(--u) * 20);
+  padding: 0 calc(var(--u) * 12) !important;
   border-radius: 999px;
-  font-size: 0.78em;
-  line-height: 1.2;
-  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
-  opacity: 0.6;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent) !important;
+  font-size: calc(var(--u) * 10) !important;
+  cursor: pointer;
+  opacity: 0.45;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-.recipe-chip:hover span {
-  opacity: 0.9;
+.recipe-chip:hover {
+  opacity: 0.8;
 }
 
-.recipe-chip.is-on span {
+.recipe-chip.is-on {
   opacity: 1;
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  border-color: transparent;
+  border-color: transparent !important;
+  background: color-mix(in srgb, currentColor 8%, transparent) !important;
+}
+
+/* ingredients and steps side by side; the notes box sits below them */
+.recipe-columns {
+  flex: 1 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--u) * 32);
+  margin-top: calc(var(--u) * 40);
+  min-height: calc(var(--u) * 150);
+  align-content: start;
+}
+
+.recipe-columns section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 4);
+  min-width: 0;
+}
+
+.recipe-columns .recipe-label {
+  margin-bottom: calc(var(--u) * 2);
+}
+
+.recipe-ing,
+.recipe-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 6);
+  width: 100%;
+}
+
+/* "1 cup / milk": the amount is only as wide as what's in it */
+.recipe-scroll .recipe-amount {
+  field-sizing: content;
+  min-width: 1ch;
+}
+
+.recipe-name,
+.recipe-step textarea {
+  flex: 1;
+}
+
+.recipe-step textarea {
+  resize: none;
+  overflow: hidden;
+}
+
+.recipe-num {
+  flex: none;
+  min-width: 1.1em;
+  opacity: 0.45;
 }
 
 /* tick off what you've got */
 .recipe-scroll .recipe-check {
-  flex: 0 0 auto;
-  width: 0.95em;
-  height: 0.95em;
-  margin-top: calc((var(--line) - 0.95em) / 2);
-  margin-right: 0.15em;
-  border: 1.5px solid color-mix(in srgb, currentColor 40%, transparent);
-  border-radius: 0.25em;
+  flex: none;
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+  margin-top: 0.15em;
+  margin-right: calc(var(--u) * 3);
+  border: 1.2px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: calc(var(--u) * 2);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -695,32 +745,21 @@ body {
 
 .recipe-check[aria-checked='true']::after {
   content: '';
-  width: 0.28em;
-  height: 0.5em;
-  margin-top: -0.1em;
+  width: 28%;
+  height: 52%;
+  margin-top: -12%;
   border: solid #fff;
-  border-width: 0 2px 2px 0;
+  border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
 }
 
-.recipe-ing.is-checked .recipe-amount,
-.recipe-ing.is-checked .recipe-name {
+.recipe-ing.is-checked input {
   text-decoration: line-through;
   opacity: 0.45;
 }
 
-.recipe-num {
-  flex: 0 0 1.3em;
-}
-
-.recipe-step-text {
-  flex: 1;
-  resize: none;
-  overflow: hidden;
-}
-
 .recipe-remove {
-  flex: 0 0 1em;
+  flex: none;
   opacity: 0;
   cursor: pointer;
   transition: opacity 0.15s ease;
@@ -737,46 +776,65 @@ body {
   opacity: 0.9 !important;
 }
 
-.recipe-add {
-  display: flex;
-  align-items: center;
-  height: var(--line);
-  cursor: pointer;
-}
-
-/* a small pill, so it reads as a button */
-.recipe-add span {
-  padding: 0.35em 1.1em;
+/* a small dashed pill, so it reads as a button */
+.recipe-scroll .recipe-add {
+  height: calc(var(--u) * 20);
+  margin-top: calc(var(--u) * 6);
+  padding: 0 calc(var(--u) * 14);
   border-radius: 999px;
-  border: 1px dashed currentColor;
-  font-size: 0.78em;
-  line-height: 1.2;
-  opacity: 0.45;
+  border: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
+  font-size: calc(var(--u) * 10);
+  opacity: 0.7;
+  cursor: pointer;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-.recipe-add:hover span {
-  opacity: 0.85;
-  background: rgba(0, 0, 0, 0.05);
+.recipe-scroll .recipe-add:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+}
+
+.recipe-notes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 6);
+  min-height: calc(var(--u) * 176);
+  margin-top: calc(var(--u) * 24);
+  padding: calc(var(--u) * 13);
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: calc(var(--u) * 8);
+  cursor: text;
+}
+
+.recipe-notes textarea {
+  resize: none;
+  overflow: hidden;
 }
 
 .recipe-close {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 30px;
-  height: 30px;
+  top: calc(var(--u) * 26);
+  right: calc(var(--u) * 26);
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  padding: 0;
   border: none;
   outline: none;
-  border-radius: 999px;
   background: transparent;
   color: inherit;
-  font: inherit;
-  font-size: 18px;
-  line-height: 1;
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.recipe-close svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
 }
 
 .recipe-close:hover {

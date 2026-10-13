@@ -3,39 +3,36 @@ import {
   DISH_CATEGORIES,
   emptyIngredient,
   paperBackground,
-  paperDesign,
   recipeLayout,
   recipeOf,
   scaleAmount,
   totalTime,
   BODY_FONT,
   TITLE_FONT,
-  SHEET_MIN,
   type Ingredient,
   type Recipe,
 } from '../papers'
 import type { PaperData } from './PaperNote'
 
-/** One line of writing on screen; the paper is scaled so its ruled lines are this far apart */
-const LINE_PX = 30
-/** Space between the writing and every edge of the sheet (world units) */
-const PAD = 0.03
-/** Width of the (faint) scrollbar, which sits at the sheet's right edge */
-const SCROLLBAR = 6
-/** Where a ruled line falls: rows start here plus a whole number of lines */
-const ROW_ORIGIN = 0.05 - 0.024 * 0.8
+/** The sheet's layout comes from a 607 × 637 design; everything is sized in those units (--u) */
+const DESIGN: [number, number] = [607, 637]
+/** The same sheet in world units, for drawing the note's paper behind it */
+const SHEET: [number, number] = [0.6, 0.63]
 /** How much to make: amounts and servings show multiplied (what's saved stays as written) */
 const SCALES = [
-  [0.5, '½x'],
+  [0.5, '1/2x'],
   [1, '1x'],
-  [1.5, '1.5x'],
   [2, '2x'],
 ] as const
 
+/** As big as fits the window (up to a quarter over the design's size) */
+const fit = () => Math.min((innerHeight * 0.86) / DESIGN[1], (innerWidth * 0.92) / DESIGN[0], 1.25)
+
 /**
  * Click a note to write on it: it comes up large in front of the fridge, in
- * the same paper, with a section for each part of a recipe (name and details,
- * ingredients, steps, notes). Long recipes scroll. Saves when you close it.
+ * the same paper. The name, rating and kind of dish sit at the top with the
+ * times and servings; ingredients and steps side by side; notes in a box at
+ * the bottom. Long recipes scroll. Saves when you close it.
  */
 export default function RecipeEditor({
   paper,
@@ -60,24 +57,13 @@ export default function RecipeEditor({
   // which row to put the cursor in after adding one
   const focusNext = useRef<string | null>(null)
 
-  // the note's own paper, but at least big enough to write a recipe on comfortably
-  const [w0, h0] = paperDesign(paper.kind).size
-  const size: [number, number] = [Math.max(w0, SHEET_MIN[0]), Math.max(h0, SHEET_MIN[1])]
-  const L = recipeLayout(paper.kind, paper.style, size)
-  const fit = () => Math.min(LINE_PX / L.gap, (innerHeight * 0.8) / size[1], (innerWidth * 0.9) / size[0])
-  const [s, setS] = useState(fit)
+  const [u, setU] = useState(fit)
   useEffect(() => {
-    const r = () => setS(fit())
+    const r = () => setU(fit())
     addEventListener('resize', r)
     return () => removeEventListener('resize', r)
-  })
-  const px = (v: number) => v * s
-  const line = px(L.gap)
-  // the same space on every side (the name's row has room above its letters, so it starts higher);
-  // on ruled paper the top snaps onto the lines instead, and the left clears the margin rule
-  const ruled = paper.style === 'lined' || paper.style === 'grid'
-  const top = ruled ? ROW_ORIGIN + Math.ceil((PAD - ROW_ORIGIN) / L.gap) * L.gap : PAD - L.gap * 0.55
-  const left = Math.max(PAD, L.left)
+  }, [])
+  const ink = recipeLayout(paper.kind, paper.style).ink
 
   const done = () => {
     onSave({
@@ -104,7 +90,7 @@ export default function RecipeEditor({
     focusNext.current = null
   })
   useEffect(() => {
-    focus(paper.title ? 'ing-0-name' : 'title')
+    focus(paper.title ? 'ing-0-amount' : 'title')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -145,179 +131,186 @@ export default function RecipeEditor({
         ref={sheet}
         className="recipe-sheet"
         style={{
-          width: px(size[0]),
-          height: px(size[1]),
-          backgroundImage: `url(${paperBackground(paper.kind, paper.style, size)})`,
-          color: L.ink,
+          width: DESIGN[0] * u,
+          height: DESIGN[1] * u,
+          backgroundImage: `url(${paperBackground(paper.kind, paper.style, SHEET)})`,
+          color: ink,
           fontFamily: BODY_FONT,
-          ['--line' as string]: `${line}px`,
+          ['--u' as string]: `${u}px`,
+          ['--serif' as string]: TITLE_FONT,
         }}
       >
-        <div
-          className="recipe-scroll"
-          style={{
-            left: px(left),
-            // runs to the sheet's edge so the scrollbar sits out there, past the close button
-            right: 0,
-            paddingRight: px(PAD) - SCROLLBAR,
-            top: px(top),
-            bottom: px(PAD),
-            fontSize: px(L.bodySize),
-          }}
-        >
+        <div className="recipe-scroll">
           <div className="recipe-head">
-            <input
-              data-focus="title"
-              className="recipe-title"
-              value={r.title}
-              maxLength={80}
-              placeholder="(recipe name)"
-              style={{ fontSize: px(L.titleSize), fontFamily: TITLE_FONT }}
-              onChange={(e) => set({ title: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return
-                e.preventDefault()
-                focus('ing-0-amount')
-              }}
-            />
-            <select
-              className={`recipe-pill recipe-category${r.category ? '' : ' is-empty'}`}
-              value={r.category}
-              aria-label="what kind of dish"
-              onChange={(e) => set({ category: e.target.value })}
-            >
-              <option value="">(category)</option>
-              {DISH_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <div>
+              <input
+                data-focus="title"
+                className="recipe-title"
+                value={r.title}
+                maxLength={80}
+                placeholder="Recipe Name"
+                onChange={(e) => set({ title: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  focus('ing-0-amount')
+                }}
+              />
+              <div className="recipe-rating" role="radiogroup" aria-label="rating">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button
+                    key={n}
+                    role="radio"
+                    aria-checked={r.rating === n}
+                    aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                    className={n <= r.rating ? 'is-on' : ''}
+                    // clicking the current rating again clears it
+                    onClick={() => set({ rating: r.rating === n ? 0 : n })}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 2.8l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.6l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className={`recipe-category${r.category ? '' : ' is-empty'}`}>
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M3 4.5l3 3 3-3" />
+              </svg>
+              <select value={r.category} aria-label="what kind of dish" onChange={(e) => set({ category: e.target.value })}>
+                <option value="">Category</option>
+                {DISH_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c[0].toUpperCase() + c.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <div className="recipe-row recipe-rating" role="radiogroup" aria-label="rating">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                role="radio"
-                aria-checked={r.rating === n}
-                aria-label={`${n} star${n > 1 ? 's' : ''}`}
-                className={n <= r.rating ? 'is-on' : ''}
-                // clicking the current rating again clears it
-                onClick={() => set({ rating: r.rating === n ? 0 : n })}
-              >
-                ★
-              </button>
-            ))}
-          </div>
-
-          <div className="recipe-row recipe-details">
-            <span className="recipe-label">prep</span>
-            <Minutes value={r.prep} onChange={(prep) => set({ prep })} />
-            <span className="recipe-label">cook</span>
-            <Minutes value={r.cook} onChange={(cook) => set({ cook })} />
-            <span className="recipe-label">total</span>
-            <span className={total ? '' : 'recipe-faint'}>{total || '–'}</span>
-            <span className="recipe-label">serves</span>
-            <input
-              className="recipe-small"
-              value={scaled ? scaleAmount(r.serves, scale) : r.serves}
-              readOnly={scaled}
-              maxLength={12}
-              inputMode="numeric"
-              placeholder="(#)"
-              aria-label="serves"
-              onChange={(e) => set({ serves: e.target.value })}
-            />
-          </div>
-
-          <div className="recipe-row recipe-scales">
+          <div className="recipe-facts">
+            <Fact label="prep">
+              <Minutes value={r.prep} onChange={(prep) => set({ prep })} />
+            </Fact>
+            <Fact label="cook">
+              <Minutes value={r.cook} onChange={(cook) => set({ cook })} />
+            </Fact>
+            <Fact label="total">
+              <span className={total ? '' : 'recipe-faint'}>{total || '# min'}</span>
+            </Fact>
+            <div className="recipe-scales">
               {SCALES.map(([k, label]) => (
                 <button key={k} className={`recipe-chip${scale === k ? ' is-on' : ''}`} onClick={() => setScale(k)}>
-                  <span>{label}</span>
+                  {label}
                 </button>
               ))}
+            </div>
+            <Fact label="serves" end>
+              <span className="recipe-unit">
+                <input
+                  value={scaled ? scaleAmount(r.serves, scale) : r.serves}
+                  readOnly={scaled}
+                  maxLength={12}
+                  inputMode="numeric"
+                  placeholder="#"
+                  aria-label="serves"
+                  size={Math.max(1, (scaled ? scaleAmount(r.serves, scale) : r.serves).length)}
+                  onChange={(e) => set({ serves: e.target.value })}
+                />
+                <span className={r.serves ? '' : 'recipe-faint'}>people</span>
+              </span>
+            </Fact>
           </div>
 
-          <div className="recipe-divider" />
-          <p className="recipe-heading">ingredients</p>
-          {r.ingredients.map((g, i) => (
-            <div className={`recipe-ing${g.checked ? ' is-checked' : ''}`} key={i}>
-              <button
-                className="recipe-check"
-                role="checkbox"
-                aria-checked={!!g.checked}
-                aria-label="got it"
-                tabIndex={-1}
-                onClick={() => setIng(i, { checked: !g.checked })}
-              />
-              <input
-                data-focus={`ing-${i}-amount`}
-                className="recipe-amount"
-                value={scaled ? scaleAmount(g.amount, scale) : g.amount}
-                readOnly={scaled}
-                placeholder="(amount)"
-                maxLength={40}
-                onChange={(e) => setIng(i, { amount: e.target.value })}
-                onKeyDown={rowKeys(() => focus(`ing-${i}-name`), !g.amount && !g.name, () => removeIng(i))}
-              />
-              <input
-                data-focus={`ing-${i}-name`}
-                className="recipe-name"
-                value={g.name}
-                placeholder="(ingredient)"
-                maxLength={120}
-                onChange={(e) => setIng(i, { name: e.target.value })}
-                onKeyDown={rowKeys(() => addIng(i + 1), !g.amount && !g.name, () => removeIng(i))}
-              />
-              <button className="recipe-remove" aria-label="remove ingredient" tabIndex={-1} onClick={() => removeIng(i)}>
-                ×
+          <div className="recipe-columns">
+            <section>
+              <h3 className="recipe-label">ingredients</h3>
+              {r.ingredients.map((g, i) => (
+                <div className={`recipe-ing${g.checked ? ' is-checked' : ''}`} key={i}>
+                  <button
+                    className="recipe-check"
+                    role="checkbox"
+                    aria-checked={!!g.checked}
+                    aria-label="got it"
+                    tabIndex={-1}
+                    onClick={() => setIng(i, { checked: !g.checked })}
+                  />
+                  <input
+                    data-focus={`ing-${i}-amount`}
+                    className="recipe-amount"
+                    value={scaled ? scaleAmount(g.amount, scale) : g.amount}
+                    readOnly={scaled}
+                    placeholder="1 cup"
+                    maxLength={40}
+                    size={Math.max(5, (scaled ? scaleAmount(g.amount, scale) : g.amount).length)}
+                    onChange={(e) => setIng(i, { amount: e.target.value })}
+                    onKeyDown={rowKeys(() => focus(`ing-${i}-name`), !g.amount && !g.name, () => removeIng(i))}
+                  />
+                  <span className="recipe-faint">/</span>
+                  <input
+                    data-focus={`ing-${i}-name`}
+                    className="recipe-name"
+                    value={g.name}
+                    placeholder="milk"
+                    maxLength={120}
+                    onChange={(e) => setIng(i, { name: e.target.value })}
+                    onKeyDown={rowKeys(() => addIng(i + 1), !g.amount && !g.name, () => removeIng(i))}
+                  />
+                  <button className="recipe-remove" aria-label="remove ingredient" tabIndex={-1} onClick={() => removeIng(i)}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button className="recipe-add" onClick={() => addIng(r.ingredients.length)}>
+                + ingredient
               </button>
-            </div>
-          ))}
-          <button className="recipe-add" onClick={() => addIng(r.ingredients.length)}>
-            <span>+ ingredient</span>
-          </button>
+            </section>
 
-          <div className="recipe-divider" />
-          <p className="recipe-heading">steps</p>
-          {r.steps.map((t, i) => (
-            <div className="recipe-step" key={i}>
-              <span className="recipe-num">{i + 1}.</span>
-              <AutoText
-                id={`step-${i}`}
-                value={t}
-                line={line}
-                placeholder="(what to do)"
-                onChange={(v) => set({ steps: r.steps.map((x, j) => (j === i ? v.replace(/\n/g, ' ') : x)) })}
-                onKeyDown={rowKeys(() => addStep(i + 1), !t, () => removeStep(i))}
-              />
-              <button className="recipe-remove" aria-label="remove step" tabIndex={-1} onClick={() => removeStep(i)}>
-                ×
+            <section>
+              <h3 className="recipe-label">steps</h3>
+              {r.steps.map((t, i) => (
+                <div className="recipe-step" key={i}>
+                  <span className="recipe-num">{i + 1}.</span>
+                  <AutoText
+                    id={`step-${i}`}
+                    value={t}
+                    placeholder="Add the milk to a bowl..."
+                    onChange={(v) => set({ steps: r.steps.map((x, j) => (j === i ? v.replace(/\n/g, ' ') : x)) })}
+                    onKeyDown={rowKeys(() => addStep(i + 1), !t, () => removeStep(i))}
+                  />
+                  <button className="recipe-remove" aria-label="remove step" tabIndex={-1} onClick={() => removeStep(i)}>
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button className="recipe-add" onClick={() => addStep(r.steps.length)}>
+                + step
               </button>
-            </div>
-          ))}
-          <button className="recipe-add" onClick={() => addStep(r.steps.length)}>
-            <span>+ step</span>
-          </button>
-
-          <div className="recipe-divider" />
-          <p className="recipe-heading">notes</p>
-          <div className="recipe-step">
-            <AutoText
-              id="notes"
-              value={r.notes}
-              line={line}
-              maxLength={2000}
-              placeholder="(swaps, tips, where it's from…)"
-              onChange={(notes) => set({ notes })}
-            />
+            </section>
           </div>
+
+          <label className="recipe-notes">
+            <span className="recipe-label">extra notes</span>
+            <AutoText id="notes" value={r.notes} maxLength={2000} placeholder="" onChange={(notes) => set({ notes })} />
+          </label>
         </div>
         <button className="recipe-close" aria-label="close" onClick={done}>
-          ×
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M2 2l12 12M14 2L2 14" />
+          </svg>
         </button>
       </div>
+    </div>
+  )
+}
+
+/** A small label over its value (prep, cook, total, serves) */
+function Fact({ label, end, children }: { label: string; end?: boolean; children: React.ReactNode }) {
+  return (
+    <div className={`recipe-fact${end ? ' is-end' : ''}`}>
+      <span className="recipe-label">{label}</span>
+      {children}
     </div>
   )
 }
@@ -325,25 +318,24 @@ export default function RecipeEditor({
 /** A time in minutes */
 function Minutes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <span className="recipe-minutes">
+    <span className="recipe-unit">
       <input
-        className="recipe-small"
         value={value}
         maxLength={4}
         inputMode="numeric"
-        placeholder="(#)"
+        placeholder="#"
+        size={Math.max(1, value.length)}
         onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ''))}
       />
-      <span className="recipe-faint">min</span>
+      <span className={value ? '' : 'recipe-faint'}>min</span>
     </span>
   )
 }
 
-/** Writing that wraps onto as many ruled lines as it needs (steps, notes) */
+/** Writing that grows to fit what's in it (steps, notes) */
 function AutoText({
   id,
   value,
-  line,
   placeholder,
   maxLength = 600,
   onChange,
@@ -351,7 +343,6 @@ function AutoText({
 }: {
   id: string
   value: string
-  line: number
   placeholder: string
   maxLength?: number
   onChange: (v: string) => void
@@ -361,13 +352,12 @@ function AutoText({
   useLayoutEffect(() => {
     const t = ref.current!
     t.style.height = '0px'
-    t.style.height = `${Math.max(1, Math.floor(t.scrollHeight / line + 0.3)) * line}px`
-  }, [value, line])
+    t.style.height = `${t.scrollHeight}px`
+  })
   return (
     <textarea
       ref={ref}
       data-focus={id}
-      className="recipe-step-text"
       rows={1}
       value={value}
       maxLength={maxLength}
