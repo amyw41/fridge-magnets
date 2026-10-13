@@ -40,7 +40,6 @@ export type PaperStyleId = 'textured' | 'lined' | 'grid' | 'dotted' | 'cardstock
  * down to black. Bottom row: sticky notes in the palette's pastels.
  */
 export const PAPER_STYLES: { id: PaperStyleId; label: string; color: string; swatch: string }[] = [
-  { id: 'textured', label: 'textured', color: '#f8f7f3', swatch: 'linear-gradient(150deg, #fbfaf7, #efede7)' },
   {
     id: 'lined',
     label: 'lined',
@@ -54,6 +53,7 @@ export const PAPER_STYLES: { id: PaperStyleId; label: string; color: string; swa
     swatch: 'repeating-linear-gradient(90deg, transparent 0 3px, #bcd2ec 3px 4px), repeating-linear-gradient(transparent 0 3px, #bcd2ec 3px 4px), #fdfdfc',
   },
   { id: 'dotted', label: 'dotted', color: '#fdfdfb', swatch: 'radial-gradient(circle, #a7afb9 0.7px, #fdfdfb 1.1px) 0 0 / 4px 4px' },
+  { id: 'textured', label: 'textured', color: '#f8f7f3', swatch: 'linear-gradient(150deg, #fbfaf7, #efede7)' },
   { id: 'cardstock', label: 'cardstock', color: '#f3ecd7', swatch: 'linear-gradient(150deg, #f7f1df, #ece3c8)' },
   { id: 'kraft', label: 'kraft', color: '#d3b07e', swatch: 'linear-gradient(150deg, #dbba8a, #c9a26c)' },
   { id: 'black', label: 'black', color: '#2a292c', swatch: 'linear-gradient(150deg, #3a393d, #1f1e21)' },

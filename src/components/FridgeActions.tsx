@@ -3,25 +3,25 @@ import { useEffect, useRef, useState } from 'react'
 type Result = 'done' | 'cancelled'
 
 /**
- * Two glass buttons in the corner: share the fridge (as a picture or a link
- * that opens it), and clear everything off it (tap twice, so one stray click
- * can't wipe it).
+ * Glass buttons in the corner: bring the view back to the front of the fridge,
+ * and share the fridge (as a picture or a link that opens it). Clearing the
+ * fridge lives on the sidebar's bin.
  */
 export default function FridgeActions({
   hidden,
   onPicture,
   onLink,
-  onClear,
-  empty,
+  onResetView,
+  canResetView,
 }: {
   hidden: boolean
+  onResetView: () => void
+  /** False while already looking at the front of the fridge */
+  canResetView: boolean
   onPicture: () => Promise<Result>
   onLink: () => Promise<'shared' | 'copied' | 'cancelled'>
-  onClear: () => void
-  empty: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const [armed, setArmed] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const timer = useRef(0)
   const wrap = useRef<HTMLDivElement>(null)
@@ -41,7 +41,6 @@ export default function FridgeActions({
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
       setNote(null)
-      setArmed(false)
     }, ms)
     setNote(text)
   }
@@ -54,19 +53,18 @@ export default function FridgeActions({
     setOpen(false)
     if ((await onLink()) === 'copied') flash('link copied', 2200)
   }
-  const clear = () => {
-    setOpen(false)
-    if (!armed) {
-      setArmed(true)
-      flash(null, 3500)
-      return
-    }
-    setArmed(false)
-    onClear()
-  }
 
   return (
     <div ref={wrap} className={`fridge-actions${hidden ? ' is-hidden' : ''}`}>
+      <button className="glass-btn" onClick={onResetView} disabled={!canResetView} title="Glide back to the front of the fridge">
+        {/* a glass eye: back to looking at the front */}
+        <svg className="glass-icon" viewBox="6.5 6.5 19 19" aria-hidden="true">
+          <path d="M8.2 16c2-3.6 4.7-5.4 7.8-5.4s5.8 1.8 7.8 5.4c-2 3.6-4.7 5.4-7.8 5.4s-5.8-1.8-7.8-5.4z" fill="url(#action-fill)" stroke="url(#action-rim)" strokeWidth="1.5" strokeLinejoin="round" />
+          <circle cx="16" cy="16" r="2.6" fill="none" stroke="#7d828a" strokeWidth="1.5" />
+          <circle cx="16" cy="16" r="0.9" fill="#7d828a" />
+        </svg>
+        reset view
+      </button>
       <div className="share-wrap">
         <button className={`glass-btn${open ? ' is-open' : ''}`} onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           {/* silver glass like the sidebar icons: a tray with an arrow lifting out */}
@@ -107,18 +105,6 @@ export default function FridgeActions({
           </div>
         )}
       </div>
-      <button className={`glass-btn${armed ? ' is-armed' : ''}`} onClick={clear} disabled={empty && !armed}>
-        {/* the sidebar's bin */}
-        <svg className="glass-icon" viewBox="6.5 7 19 19" aria-hidden="true">
-          <g fill="url(#action-fill)" stroke="url(#action-rim)" strokeWidth="1.5" strokeLinejoin="round">
-            <path d="M14 10.6v-0.7a1.1 1.1 0 0 1 1.1-1.1h1.8a1.1 1.1 0 0 1 1.1 1.1v0.7" fill="none" />
-            <rect x="9.4" y="10.6" width="13.2" height="2.3" rx="1.15" />
-            <path d="M10.9 13.9h10.2l-0.9 8.7a1.7 1.7 0 0 1-1.7 1.5h-5a1.7 1.7 0 0 1-1.7-1.5z" />
-          </g>
-          <path d="M14.3 16.3v5.4M17.7 16.3v5.4" stroke="#7d828a" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        {armed ? 'tap again to clear' : 'clear all'}
-      </button>
     </div>
   )
 }

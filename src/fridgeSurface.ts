@@ -185,7 +185,7 @@ export class FridgeSurface {
    * or null if it misses or only grazes it edge-on. Taller than the fridge,
    * so hits above or below it still count (and are off the surface).
    */
-  hit(ray: THREE.Ray, off: number, minFacing = 0.15): SurfaceHit | null {
+  hit(ray: THREE.Ray, off: number, minFacing = 0.3): SurfaceHit | null {
     const { a, b, zc } = this
     const { origin: o, direction: d } = ray
     const Ro = this.R + off
@@ -231,6 +231,54 @@ export class FridgeSurface {
         }
     if (best === Infinity || facing < minFacing) return null
     return { s: this.toS(hx, hz), y: o.y + d.y * best }
+  }
+
+  /** How far (x, y, z) is outside the fridge pushed `off` outward (0 on or inside it) */
+  gap(x: number, y: number, z: number, off = 0) {
+    const qx = Math.abs(x) - this.a
+    const qz = Math.abs(z - this.zc) - this.b
+    const plan = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - this.R - off
+    const dy = Math.max(this.band[0] - y, y - this.band[1], 0)
+    return Math.hypot(Math.max(plan, 0), dy)
+  }
+
+  /**
+   * The spot on the fridge nearest a ray that misses it (or only grazes it),
+   * kept on a side that faces the ray, and how far the ray passes from it.
+   */
+  nearest(ray: THREE.Ray, off: number): SurfaceHit & { gap: number } {
+    const { origin: o, direction: d } = ray
+    // the distance from a convex shape along a line has one dip: home in on it
+    let lo = 0
+    let hi = o.length() + 20
+    const at = (t: number) => this.gap(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t, off)
+    for (let i = 0; i < 60; i++) {
+      const m1 = lo + (hi - lo) / 3
+      const m2 = hi - (hi - lo) / 3
+      if (at(m1) < at(m2)) hi = m2
+      else lo = m1
+    }
+    const t = (lo + hi) / 2
+    const facing = (s: number) => {
+      const angle = this.point(s).angle
+      return -(d.x * Math.sin(angle) + d.z * Math.cos(angle))
+    }
+    // turn toward the side that faces the pointer, so it never goes edge-on (or out of sight)
+    let s = this.toS(o.x + d.x * t, o.z + d.z * t)
+    for (let i = 0; i < 300 && facing(s) < 0.3; i++) {
+      const step = facing(s + 0.01) > facing(s - 0.01) ? 0.01 : -0.01
+      if (facing(s + step) <= facing(s)) break
+      s += step
+    }
+    const y = THREE.MathUtils.clamp(o.y + d.y * t, this.band[0], this.band[1])
+    return { s: this.wrap(s), y, gap: at(t) }
+  }
+
+  /** (x, z) moved out to at least `clear` from the fridge's sides, seen from above */
+  clearOf(x: number, z: number, clear: number): [number, number] {
+    if (this.gap(x, this.band[0], z) >= clear) return [x, z]
+    const p = this.point(this.toS(x, z), clear)
+    return [p.x, p.z]
   }
 
   /** Move [s, y] from another fridge onto this one, keeping it on the same face */

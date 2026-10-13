@@ -72,8 +72,13 @@ export default function App() {
   // swipe pulls back to the full fridge (a reset glide from the intro shot).
   const [intro, setIntro] = useState(true)
   const [resetSignal, setResetSignal] = useState(0)
+  // Whether the camera has been moved off the front view ("reset view" is only clickable then)
+  const [awayFromFront, setAwayFromFront] = useState(false)
   const introRef = useRef(true)
   const readyRef = useRef(false) // no starting the app while the load-in curtain is still up
+  // The magnets there at load snap on one by one; once that's over, this is cleared so magnets
+  // added later (whose ids can match theirs, since saves renumber) always pop straight in
+  const loadIn = useRef<Map<number, number> | null>(new Map(magnets.map((m, i) => [m.id, i])))
 
   // Load-in: a white curtain stays up until the scene has drawn and the fonts
   // are in, so nothing pops in half-built. Then everything plays in together.
@@ -111,6 +116,12 @@ export default function App() {
   }, [intro])
 
   const ready = sceneDrawn && fontsReady && introPose !== null
+  useEffect(() => {
+    if (!ready || !loadIn.current) return
+    const n = loadIn.current.size
+    const t = window.setTimeout(() => (loadIn.current = null), (LOAD_IN.magnetsStart + n * LOAD_IN.magnetsStagger) * 1000)
+    return () => window.clearTimeout(t)
+  }, [ready])
   readyRef.current = ready
 
   useEffect(() => {
@@ -184,9 +195,16 @@ export default function App() {
     setPapers((ps) => {
       const me = ps.find((p) => p.id === id)!
       const spot = placePaper(me.kind, x, y)
-      const moved = spot ? { ...me, position: spot } : me // off the fridge: slides back
+      const moved = spot ? { ...me, position: spot, floor: undefined } : me // nowhere it fits: back where it was
       return [...ps.filter((p) => p.id !== id), moved]
     })
+  }, [])
+  // Let go in the open: it fell to the floor, and stays there until picked up
+  const handlePaperFloor = useCallback((id: number, x: number, z: number, yaw: number) => {
+    setPapers((ps) => ps.map((p) => (p.id === id ? { ...p, floor: [x, z, yaw] } : p)))
+  }, [])
+  const handleFloor = useCallback((id: number, x: number, z: number, yaw: number) => {
+    setMagnets((ms) => ms.map((m) => (m.id === id ? { ...m, floor: [x, z, yaw] } : m)))
   }, [])
 
   // Switching fridge model moves the doors, so re-seat everything on the new ones
@@ -242,6 +260,7 @@ export default function App() {
         })
         setMagnets((ms) =>
           ms.map(moved).reduce<MagnetData[]>((placed, m) => {
+            if (m.floor) return [...placed, { ...m, floor: [...to.clearOf(m.floor[0], m.floor[1], 0.08), m.floor[2]] }] // on the floor: stays there (clear of a bigger fridge)
             const spot =
               resolveDrop({ x: m.position[0], y: m.position[1] }, m.shape, placed) ??
               resolveDrop(doorCentre(), m.shape, placed)
@@ -250,6 +269,7 @@ export default function App() {
         )
         setPapers((ps) =>
           ps.map(moved).flatMap((p) => {
+            if (p.floor) return [{ ...p, floor: [...to.clearOf(p.floor[0], p.floor[1], 0.2), p.floor[2]] }]
             const spot = placePaper(p.kind, p.position[0], p.position[1]) ?? placePaper(p.kind, doorCentre().x, doorCentre().y)
             return spot ? [{ ...p, position: spot }] : []
           }),
@@ -277,7 +297,7 @@ export default function App() {
     setMagnets((ms) => {
       const me = ms.find((m) => m.id === id)!
       const spot = resolveDrop({ x, y }, me.shape, ms.filter((m) => m.id !== id))
-      return spot ? ms.map((m) => (m.id === id ? { ...m, position: spot } : m)) : ms
+      return spot ? ms.map((m) => (m.id === id ? { ...m, position: spot, floor: undefined } : m)) : ms
     })
   }, [])
 
@@ -312,20 +332,22 @@ export default function App() {
             stack={i}
             onDragChange={setDragging}
             onDrop={handlePaperDrop}
+            onFloor={handlePaperFloor}
             onTrash={(id) => setPapers((ps) => ps.filter((q) => q.id !== id))}
             onOpen={setWriting}
           />
         ))}
         {magnets.map((m) => {
           // Starting magnets snap on one by one after the reveal; ones added later pop straight in
-          const order = initialMagnets.findIndex((s) => s.id === m.id)
-          const delay = order < 0 ? 0 : LOAD_IN.magnetsStart + order * LOAD_IN.magnetsStagger
+          const order = loadIn.current?.get(m.id)
+          const delay = order === undefined ? 0 : LOAD_IN.magnetsStart + order * LOAD_IN.magnetsStagger
           return (
             <Magnet
               key={m.id}
               data={m}
               onDragChange={setDragging}
               onDrop={handleDrop}
+              onFloor={handleFloor}
               onTrash={(id) => setMagnets((ms) => ms.filter((q) => q.id !== id))}
               appearDelay={ready ? delay : null}
             />
@@ -355,6 +377,7 @@ export default function App() {
           startAtIntro
           introPose={intro ? introPose : null}
           revealed={ready}
+          onAwayChange={setAwayFromFront}
         />
       </Canvas>
       {/* Load-in curtain; the silver star only shows if loading takes a moment */}
@@ -384,6 +407,11 @@ export default function App() {
           onAddPaper={addPaper}
           onDropPaper={dropPaper}
           pxPerUnit={pxPerUnit}
+          onClearAll={() => {
+            setMagnets([])
+            setPapers([])
+          }}
+          canClear={magnets.length > 0 || papers.length > 0}
         />
       </div>
       <HelpCard hidden={intro || entering} />
@@ -399,11 +427,8 @@ export default function App() {
         hidden={intro || entering}
         onPicture={savePicture}
         onLink={shareLink}
-        onClear={() => {
-          setMagnets([])
-          setPapers([])
-        }}
-        empty={!magnets.length && !papers.length}
+        onResetView={() => setResetSignal((n) => n + 1)}
+        canResetView={awayFromFront}
       />
       {fridgeMenuAt && !intro && (
         <FridgeMenu at={fridgeMenuAt} look={look} onChange={changeLook} onClose={closeFridgeMenu} />

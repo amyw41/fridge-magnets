@@ -903,56 +903,227 @@ body {
   pointer-events: none;
 }
 
-.help-card {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 300px;
-  isolation: isolate;
-  padding: 16px 16px 14px;
-  transform-origin: 100% 100%;
-  transition: transform 0.3s cubic-bezier(0.3, 0.7, 0.2, 1), opacity 0.2s ease;
-}
-
-.help-card::before {
-  content: '';
-  position: absolute;
+/* first-visit guide: a card in the middle, the fridge paused and blurred behind it */
+.guide {
+  position: fixed;
   inset: 0;
-  z-index: -1;
-  border-radius: 20px;
-  background: var(--glass);
-  border: 1px solid var(--glass-edge);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(236, 236, 240, 0.28);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  cursor: pointer;
+  transition: opacity 0.35s ease, visibility 0s 0.35s;
 }
 
-.help:not(.is-open) .help-card {
-  transform: scale(0.12);
+.guide:not(.is-open) {
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
-.help-card ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 11px;
+.guide.is-open {
+  transition: opacity 0.35s ease;
 }
 
-.help-card li {
+.guide-card {
+  position: relative;
+  width: min(460px, 100%);
+  padding: 20px 22px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 60px rgba(40, 30, 50, 0.16), 0 2px 8px rgba(40, 30, 50, 0.08);
+  cursor: default;
+}
+
+/* only animate a page while the guide is showing, so closing is a clean fade */
+.guide.is-open .guide-card.is-open {
+  animation: guide-in 0.4s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+.guide.is-open .guide-card.is-next {
+  animation: guide-from-right 0.35s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+.guide.is-open .guide-card.is-back {
+  animation: guide-from-left 0.35s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes guide-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(48px);
+  }
+}
+
+@keyframes guide-from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-48px);
+  }
+}
+
+.guide-controls {
   display: grid;
-  grid-template-columns: 30px 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.guide-control {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  font-size: 13px;
+  text-align: center;
+  gap: 3px;
+  font-size: 12.5px;
   line-height: 1.35;
   color: #55575d;
 }
 
-.help-card b {
+.guide-control b {
+  margin-top: 4px;
   font-weight: 600;
   color: #3d3f44;
+}
+
+.guide-mouse svg {
+  display: block;
+  width: 84px;
+  height: 94px;
+  overflow: visible;
+}
+
+.guide-lit {
+  fill: #ffb1c6;
+  stroke: #e98aa5;
+  stroke-width: 1.2;
+  animation: guide-press 2.4s ease-in-out infinite;
+}
+
+.guide-arrow {
+  fill: none;
+  stroke: #a3a7ae;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* each mouse acts its move out: press, drag, let go */
+.guide-mouse.is-turn .guide-body,
+.guide-mouse.is-slide .guide-body {
+  animation: guide-drag 2.4s ease-in-out infinite;
+}
+
+.guide-mouse.is-scroll .guide-wheel {
+  animation: guide-roll 1.2s ease-in-out infinite;
+}
+
+@keyframes guide-press {
+  0%, 10%, 90%, 100% { opacity: 0.45; }
+  20%, 80% { opacity: 1; }
+}
+
+@keyframes guide-drag {
+  0%, 20% { transform: translateX(-6px); }
+  60%, 80% { transform: translateX(6px); }
+  100% { transform: translateX(-6px); }
+}
+
+@keyframes guide-roll {
+  0%, 100% { transform: translateY(-1.5px); }
+  50% { transform: translateY(2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-card,
+  .guide-lit,
+  .guide-body,
+  .guide-wheel {
+    animation: none !important;
+  }
+}
+
+.guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.guide-list li {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 12px;
+  align-items: center;
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: #55575d;
+}
+
+.guide-list b {
+  display: block;
+  font-weight: 600;
+  color: #3d3f44;
+}
+
+.guide-line {
+  display: block;
+}
+
+.guide-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.guide-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.guide-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #c9ccd2;
+  transition: background 0.2s ease, width 0.2s ease;
+}
+
+.guide-dots i.is-on {
+  width: 16px;
+  background: #7d828a;
+}
+
+.guide-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.guide-foot .help-done.guide-back {
+  background: transparent;
+  color: #6a6f77;
+}
+
+.guide-foot .help-done {
+  margin: 0;
+  background: #f0f0f3;
+}
+
+.guide-foot .help-done:hover {
+  background: #e6e6ea;
 }
 
 .help-icon {
@@ -1024,12 +1195,6 @@ body {
 
 .help-btn:hover::before {
   background: rgba(208, 208, 214, 0.6);
-}
-
-.help.is-open .help-btn {
-  transform: scale(0.6);
-  opacity: 0;
-  pointer-events: none;
 }
 
 .help-done:focus-visible,
@@ -1105,7 +1270,7 @@ body {
 }
 
 .trash-btn {
-  cursor: default;
+  cursor: pointer;
   /* the lid tips up out of the box when something's held over it */
   overflow: visible;
 }
@@ -1129,17 +1294,43 @@ body {
   transform: translate(1px, -1.5px) rotate(18deg);
 }
 
-/* the whole bin turns red while something hovers over it */
-.trash-btn.is-hot .icon-trash * {
+/* the whole bin turns red while something hovers over it, or while it asks before clearing the fridge */
+:is(.trash-btn.is-hot, .trash-btn.is-clearing) .icon-trash * {
   stroke: #d0586e;
 }
 
-.trash-btn.is-hot .icon-trash :is(rect, path[fill^='url']) {
+:is(.trash-btn.is-hot, .trash-btn.is-clearing) .icon-trash :is(rect, path[fill^='url']) {
   fill: #fbe2e6;
 }
 
-.trash-btn.is-hot .icon-trash {
+:is(.trash-btn.is-hot, .trash-btn.is-clearing) .icon-trash {
   filter: drop-shadow(0 0 3px rgba(208, 88, 110, 0.45));
+}
+
+.trash-btn.is-clearing {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.trash-btn.is-clearing .trash-lid {
+  transform: translate(1px, -1.5px) rotate(18deg);
+}
+
+/* "are you sure?" beside the bin */
+.trash-confirm {
+  width: 200px;
+  pointer-events: none;
+}
+
+.trash-confirm .tool-panel-title {
+  color: #c2475e;
+  margin-bottom: 4px;
+}
+
+.trash-confirm p:last-child {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #55575d;
 }
 
 /* Side panel */
@@ -1230,6 +1421,7 @@ body {
 }
 
 .option-tile {
+  position: relative;
   height: 112px;
   border: none;
   border-radius: 14px;
@@ -1264,14 +1456,33 @@ body {
   display: block;
   max-width: 84px;
   max-height: 88px;
+  rotate: var(--tilt, 0deg);
   filter: drop-shadow(0 2px 3px rgba(40, 20, 30, 0.18));
   pointer-events: none;
-  transition: transform 0.15s ease;
+  transition: transform 0.2s ease;
 }
 
-.option-tile:hover .magnet-thumb,
-.option-tile:hover .paper-thumb {
+/* dealt in, one after another, whenever the paper colour changes */
+.paper-thumb.is-in {
+  animation: paper-deal 0.45s cubic-bezier(0.34, 1.4, 0.64, 1) calc(var(--i, 0) * 45ms) backwards;
+}
+
+@keyframes paper-deal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) rotate(-8deg) scale(0.85);
+  }
+}
+
+.option-tile:hover .magnet-thumb {
   transform: scale(1.06);
+}
+
+/* pressing pinches it, ready to drag onto the fridge */
+.option-tile:active .paper-thumb,
+.option-tile:active .magnet-thumb {
+  transform: translateY(-2px) scale(0.95);
+  transition-duration: 0.08s;
 }
 
 .icon-magnet-preview {
@@ -1408,17 +1619,54 @@ body {
 }
 
 .fridge-swatch {
+  position: relative;
   width: 26px;
   height: 26px;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.08), inset 0 2px 3px rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  transition: transform 0.15s ease;
+  /* a springy pop, overshooting a touch */
+  transition: transform 0.3s cubic-bezier(0.34, 1.8, 0.64, 1);
 }
 
 .fridge-swatch:hover {
-  transform: scale(1.1);
+  transform: scale(1.2);
+}
+
+.fridge-swatch:active {
+  transform: scale(0.9);
+  transition-duration: 0.08s;
+}
+
+/* picking a colour sends a ring rippling out from it */
+.fridge-swatch.is-active::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid currentColor;
+  color: rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+  animation: swatch-ripple 0.55s ease-out forwards;
+}
+
+@keyframes swatch-ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-thumb.is-in,
+  .fridge-swatch.is-active::after {
+    animation: none;
+  }
 }
 
 .fridge-swatch.is-active {

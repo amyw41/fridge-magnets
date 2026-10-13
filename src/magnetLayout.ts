@@ -13,6 +13,8 @@ export interface MagnetData {
   finish: MagnetFinish
   /** Rest position [s, y] on the fridge's unrolled outside (see fridgeSurface) */
   position: [number, number]
+  /** Fallen off onto the floor: lying at (x, z), turned yaw. Its position is then where it last was on the fridge */
+  floor?: [number, number, number]
 }
 
 /** Magnet width in world units */
@@ -75,7 +77,7 @@ export function resolveDrop(
   if (!isOnDoor(drop.x, drop.y)) return null
   const { surface } = doorFront()
   const r = collisionRadius(shape)
-  const circles = others.map((m) => ({ x: m.position[0], y: m.position[1], r: collisionRadius(m.shape) }))
+  const circles = others.filter((m) => !m.floor).map((m) => ({ x: m.position[0], y: m.position[1], r: collisionRadius(m.shape) }))
   if (isFree({ ...drop, r }, circles)) return [surface.wrap(drop.x), drop.y]
 
   const step = r * 0.25

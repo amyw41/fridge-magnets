@@ -20,6 +20,10 @@ export interface SavedFridge {
 
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v)
 const spot = (p: unknown) => Array.isArray(p) && p.length === 2 && num(p[0]) && num(p[1]) && Math.abs(p[0]) < 5 && Math.abs(p[1]) < 5
+/** On the floor: (x, z, yaw), somewhere near the fridge */
+const floorSpot = (f: unknown): f is [number, number, number] =>
+  Array.isArray(f) && f.length === 3 && f.every(num) && Math.abs(f[0]) < 6 && Math.abs(f[1]) < 6
+const onFloor = (o: { floor?: unknown }) => (floorSpot(o.floor) ? { floor: o.floor } : {})
 const words = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 /** A recipe's ingredients and steps, keeping only well-formed entries (older saves had one block of text: it becomes the steps) */
 function ingredients(v: unknown): Ingredient[] {
@@ -69,30 +73,39 @@ function check(raw: unknown): SavedFridge | null {
   )
   return {
     look: { model: l.model, color: l.color },
-    magnets: ms.map((m, i) => ({ id: i + 1, shape: m.shape, color: m.color, finish: m.finish, position: m.position })),
+    magnets: ms.map((m, i) => ({ id: i + 1, shape: m.shape, color: m.color, finish: m.finish, position: m.position, ...onFloor(m) })),
     papers: ps.map((p, i) => ({
       id: i + 1,
       kind: p.kind,
       style: p.style,
       position: p.position,
       tilt: p.tilt,
+      ...onFloor(p),
       ...recipe(p as unknown as Record<string, unknown>),
     })),
   }
 }
 
 const round = (p: [number, number]) => p.map((v) => Math.round(v * 1000) / 1000)
+const roundFloor = (f: [number, number, number]) => f.map((v) => Math.round(v * 1000) / 1000)
 
 /** A link that opens this exact fridge */
 export function fridgeLink(f: SavedFridge) {
   const short = {
     look: f.look,
-    magnets: f.magnets.map(({ shape, color, finish, position }) => ({ shape, color, finish, position: round(position) })),
-    papers: f.papers.map(({ kind, style, position, tilt, ...r }) => ({
+    magnets: f.magnets.map(({ shape, color, finish, position, floor }) => ({
+      shape,
+      color,
+      finish,
+      position: round(position),
+      ...(floor && { floor: roundFloor(floor) }),
+    })),
+    papers: f.papers.map(({ kind, style, position, tilt, floor, ...r }) => ({
       kind,
       style,
       position: round(position),
       tilt: Math.round(tilt * 1000) / 1000,
+      ...(floor && { floor: roundFloor(floor) }),
       // only the parts of the recipe that are filled in
       ...Object.fromEntries(
         Object.entries(recipeOf(r)).filter(([, v]) => (Array.isArray(v) ? v.length : v)),

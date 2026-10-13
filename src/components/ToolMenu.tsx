@@ -31,11 +31,15 @@ const presetOf = (shapeIndex: number, colorIndex: number): MagnetPreset => {
   return { shape, color: c.color, finish, label: `${c.label} ${label}` }
 }
 
-/** A grid of colour dots. With `optional`, clicking the picked one again unpicks it. */
+/**
+ * A grid of colour dots. With `optional`, clicking the picked one again unpicks it.
+ * `onPreview` hears which dot the pointer is over (null once it leaves them all).
+ */
 function Swatches({
   colors,
   value,
   onChange,
+  onPreview,
   optional = false,
   label = 'colour',
   className = '',
@@ -43,12 +47,13 @@ function Swatches({
   colors: { label: string; color: string; swatch?: string }[]
   value: number | null
   onChange: (i: number | null) => void
+  onPreview?: (i: number | null) => void
   optional?: boolean
   label?: string
   className?: string
 }) {
   return (
-    <div className={`tool-swatches ${className}`} role="radiogroup" aria-label={label}>
+    <div className={`tool-swatches ${className}`} role="radiogroup" aria-label={label} onPointerLeave={() => onPreview?.(null)}>
       {colors.map((c, i) => (
         <button
           key={c.label}
@@ -58,6 +63,7 @@ function Swatches({
           title={c.label}
           className={`fridge-swatch tool-swatch${i === value ? ' is-active' : ''}`}
           style={{ background: c.swatch ?? c.color }}
+          onPointerEnter={() => onPreview?.(i)}
           onClick={() => onChange(optional && i === value ? null : i)}
         />
       ))}
@@ -79,6 +85,8 @@ export default function ToolMenu({
   onAddPaper,
   onDropPaper,
   pxPerUnit,
+  onClearAll,
+  canClear,
 }: {
   /** Tapped: put it in the nearest free spot */
   onAddMagnet: (p: MagnetPreset) => void
@@ -88,18 +96,63 @@ export default function ToolMenu({
   onDropPaper: (kind: PaperKind, style: PaperStyleId, clientX: number, clientY: number) => void
   /** Screen pixels per world unit on the door right now */
   pxPerUnit: () => number
+  /** Takes everything off the fridge (the bin, clicked twice) */
+  onClearAll: () => void
+  /** Whether there's anything on the fridge to clear */
+  canClear: boolean
 }) {
+  // The bin, clicked once: it goes red and asks; a second click clears the fridge.
+  // Clicking anywhere else, or waiting a few seconds, calls it off.
+  const [clearArmed, setClearArmed] = useState(false)
+  const trashWrap = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!clearArmed) return
+    const away = (e: PointerEvent) => {
+      if (!trashWrap.current?.contains(e.target as Node)) setClearArmed(false)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setClearArmed(false)
+    const timer = window.setTimeout(() => setClearArmed(false), 4000)
+    window.addEventListener('pointerdown', away)
+    window.addEventListener('keydown', esc)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pointerdown', away)
+      window.removeEventListener('keydown', esc)
+    }
+  }, [clearArmed])
+  const clickTrash = () => {
+    if (clearArmed) {
+      setClearArmed(false)
+      onClearAll()
+    } else if (canClear) setClearArmed(true)
+  }
+
   const [open, setOpen] = useState<Section | null>(null)
   const closeTimer = useRef<number | undefined>(undefined)
   // Chosen colours, kept while the panels open and close
   const [magnetColor, setMagnetColor] = useState(MAGNET_COLORS.findIndex((c) => c.color === SILVER)) // a silver star
-  const [paperStyle, setPaperStyle] = useState(1) // lined
+  const [paperStyle, setPaperStyle] = useState(PAPER_STYLES.findIndex((s) => s.id === 'lined'))
+  // The colour under the pointer, shown on the thumbnails (and the sidebar
+  // buttons) before it's picked; leaving the dots goes back to the picked one
+  const [paperHover, setPaperHover] = useState<number | null>(null)
+  const [magnetHover, setMagnetHover] = useState<number | null>(null)
+  useEffect(() => {
+    setPaperHover(null)
+    setMagnetHover(null)
+  }, [open])
+  const shownMagnetColor = magnetHover ?? magnetColor
   const magnetThumbs = useMemo(
-    () => MAGNET_SHAPES.map((_, i) => { const p = presetOf(i, magnetColor); return magnetThumb(p.shape, p.color, p.finish) }),
-    [magnetColor],
+    () => MAGNET_SHAPES.map((_, i) => { const p = presetOf(i, shownMagnetColor); return magnetThumb(p.shape, p.color, p.finish) }),
+    [shownMagnetColor],
   )
   const style = PAPER_STYLES[paperStyle].id
-  const paperThumbs = useMemo(() => PAPERS.map((p) => paperThumb(p.kind, style)), [style])
+  const shownStyle = PAPER_STYLES[paperHover ?? paperStyle].id
+  const dealIn = (el: HTMLImageElement | null) => {
+    if (!el) return
+    if (el.complete) el.classList.add('is-in')
+    else el.addEventListener('load', () => el.classList.add('is-in'), { once: true })
+  }
+  const paperThumbs = useMemo(() => PAPERS.map((p) => paperThumb(p.kind, shownStyle)), [shownStyle])
   const thumbOf = (g: Grabbed) => (g.what === 'magnet' ? magnetThumbs : paperThumbs)[g.i]
   // Each button shows whichever option was last hovered in its panel
   const [magnetPreview, setMagnetPreview] = useState<number | null>(0) // starts on the silver star
@@ -108,7 +161,9 @@ export default function ToolMenu({
 
   // Drag an option out of the panel: a copy follows the cursor, at the size it
   // will be on the fridge, until it's let go
+  // (it's moved directly, not re-rendered, so it keeps up with the cursor)
   const [ghost, setGhost] = useState<(Grabbed & { x: number; y: number; w: number }) | null>(null)
+  const ghostRef = useRef<HTMLImageElement>(null)
   const press = useRef<(Grabbed & { x: number; y: number; dragging: boolean }) | null>(null)
   const magnetColorRef = useRef(magnetColor)
   magnetColorRef.current = magnetColor
@@ -122,11 +177,16 @@ export default function ToolMenu({
         p.dragging = true
         setOpen(null) // get the panel out of the way of the fridge
         document.body.style.cursor = 'grabbing'
+        // (magnet thumbnails have a little margin round the magnet)
+        const units = p.what === 'magnet' ? MAGNET_SIZE * 1.24 : PAPERS[p.i].size[0]
+        setGhost({ what: p.what, i: p.i, x: e.clientX, y: e.clientY, w: Math.max(28, pxPerUnit() * units) })
       }
       if (!p.dragging) return
-      // (magnet thumbnails have a little margin round the magnet)
-      const units = p.what === 'magnet' ? MAGNET_SIZE * 1.24 : PAPERS[p.i].size[0]
-      setGhost({ what: p.what, i: p.i, x: e.clientX, y: e.clientY, w: Math.max(28, pxPerUnit() * units) })
+      const g = ghostRef.current
+      if (g) {
+        g.style.left = `${e.clientX}px`
+        g.style.top = `${e.clientY}px`
+      }
     }
     const up = (e: PointerEvent) => {
       const p = press.current
@@ -171,14 +231,21 @@ export default function ToolMenu({
     closeTimer.current = window.setTimeout(() => setOpen(null), 180)
   }
 
-  // onPick: clicking the button itself adds the item its icon is showing
-  const item = (s: Section, label: string, icon: ReactNode, panel: ReactNode, onPick?: () => void) => (
+  // onPick: clicking the button itself adds the item its icon is showing.
+  // grab: the same item can be dragged straight off the button onto the fridge.
+  const item = (s: Section, label: string, icon: ReactNode, panel: ReactNode, onPick?: () => void, grab?: Grabbed) => (
     <div className="tool-item" onMouseEnter={() => openNow(s)} onMouseLeave={closeSoon}>
       <button
         className={`tool-btn${open === s ? ' is-open' : ''}`}
         aria-label={label}
         aria-expanded={open === s}
-        onClick={() => (onPick ? onPick() : setOpen(open === s ? null : s))}
+        // a press on a grabbable button adds (or drops) it on release; click is then only for the keyboard
+        onPointerDown={grab ? startPress(grab.what, grab.i) : undefined}
+        onClick={(e) => {
+          if (grab && e.detail !== 0) return
+          if (onPick) onPick()
+          else setOpen(open === s ? null : s)
+        }}
       >
         {icon}
       </button>
@@ -202,7 +269,7 @@ export default function ToolMenu({
           <img className="icon-preview" src={paperThumbs[paperPreview]} alt="" draggable={false} />
         ),
         <>
-        <Swatches colors={PAPER_STYLES} value={paperStyle} onChange={(i) => i !== null && setPaperStyle(i)} label="paper" />
+        <Swatches colors={PAPER_STYLES} value={paperStyle} onChange={(i) => i !== null && setPaperStyle(i)} onPreview={setPaperHover} label="paper" />
         <div className="option-grid">
           {PAPERS.map((p, i) => (
             <button
@@ -215,17 +282,24 @@ export default function ToolMenu({
               onKeyDown={onKey(() => onAddPaper(p.kind, style))}
             >
               <img
+                // keyed on the picked colour (not a hovered one), so picking a
+                // colour deals the sheets in again while hovering just recolours them
+                key={style}
                 className="paper-thumb"
                 src={paperThumbs[i]}
                 alt=""
                 draggable={false}
-                style={{ rotate: `${i % 2 ? 2 : -2}deg` }}
+                // dealt in once it has actually drawn, not while it's still blank
+                // (an image that's already there never fires load, so check that first)
+                ref={dealIn}
+                style={{ ['--tilt' as string]: `${i % 2 ? 2 : -2}deg`, ['--i' as string]: i }}
               />
             </button>
           ))}
         </div>
         </>,
         paperPreview === null ? undefined : () => onAddPaper(PAPERS[paperPreview].kind, style),
+        paperPreview === null ? undefined : { what: 'paper', i: paperPreview },
       )}
       {item(
         'magnets',
@@ -236,7 +310,7 @@ export default function ToolMenu({
           <img className="icon-magnet-preview" src={magnetThumbs[magnetPreview]} alt="" draggable={false} />
         ),
         <>
-        <Swatches colors={MAGNET_COLORS} value={magnetColor} onChange={(i) => i !== null && setMagnetColor(i)} />
+        <Swatches colors={MAGNET_COLORS} value={magnetColor} onChange={(i) => i !== null && setMagnetColor(i)} onPreview={setMagnetHover} />
         <div className="option-grid">
           {MAGNET_SHAPES.map((m, i) => {
             const preset = presetOf(i, magnetColor)
@@ -257,8 +331,15 @@ export default function ToolMenu({
         </div>
         </>,
         magnetPreview === null ? undefined : () => onAddMagnet(presetOf(magnetPreview, magnetColor)),
+        magnetPreview === null ? undefined : { what: 'magnet', i: magnetPreview },
       )}
-      <button className="tool-btn trash-btn" aria-label="trash" title="Drag a magnet or note here to throw it away">
+      <div className="tool-item" ref={trashWrap}>
+      <button
+        className={`tool-btn trash-btn${clearArmed ? ' is-clearing' : ''}`}
+        aria-label={clearArmed ? 'click again to clear the fridge' : 'trash'}
+        title={clearArmed ? undefined : 'Drag a magnet or note here to throw it away, or click to clear the fridge'}
+        onClick={clickTrash}
+      >
         <svg className="icon-trash" viewBox="6.5 7 19 19" aria-hidden="true">
           <defs>
             {/* Same silver as the plus, a shade deeper so the bin's outline reads at a glance */}
@@ -282,6 +363,13 @@ export default function ToolMenu({
           <path className="trash-slits" d="M14.3 16.3v5.4M17.7 16.3v5.4" stroke="#7d828a" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
+      {clearArmed && (
+        <div className="tool-panel trash-confirm" role="status">
+          <p className="tool-panel-title">are you sure?</p>
+          <p>click the bin again to clear everything off the fridge.</p>
+        </div>
+      )}
+      </div>
       {item(
         'extras',
         'extras',
@@ -314,6 +402,7 @@ export default function ToolMenu({
       {ghost &&
         createPortal(
           <img
+            ref={ghostRef}
             className="drag-ghost"
             src={thumbOf(ghost)}
             alt=""

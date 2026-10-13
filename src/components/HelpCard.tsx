@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { magnetThumb } from '../magnetThumbs'
 import { SILVER } from '../palette'
 import { paperThumb } from '../papers'
@@ -14,51 +14,166 @@ const seenBefore = () => {
 }
 
 /**
- * A quick guide to what everything does. It opens by itself on your first
- * visit, then folds away into a ? button in the corner for whenever you want it again.
+ * A two-step guide in the middle of the screen: first the mouse controls,
+ * then what everything on the fridge does. It opens by itself once you've
+ * arrived at the fridge on your first visit; the fridge waits, blurred,
+ * behind it. Clicking around the card moves it on. Afterwards it lives in a ?
+ * button in the corner.
  */
 export default function HelpCard({ hidden }: { hidden: boolean }) {
-  const [open, setOpen] = useState(() => !seenBefore())
+  const [step, setStep] = useState<0 | 1 | null>(() => (seenBefore() ? null : 0))
   const [star] = useState(() => magnetThumb('star', SILVER, 'chrome'))
   const [note] = useState(() => paperThumb('sticky', 'lined'))
+  const open = step !== null && !hidden
+  // the page last shown, kept while the guide fades out so it doesn't flick back to page one
+  const [page, setPage] = useState<0 | 1>(0)
+  // which way the newest page came in: popping up when the guide opens, sliding sideways between pages
+  const [enter, setEnter] = useState<'open' | 'next' | 'back'>('open')
+  const go = (to: 0 | 1, how: 'open' | 'next' | 'back') => {
+    setStep(to)
+    setPage(to)
+    setEnter(how)
+  }
 
   const close = () => {
-    setOpen(false)
+    setStep(null)
     try {
       localStorage.setItem(SEEN, '1')
     } catch {
       // private window: it'll just show again next time
     }
   }
+  const next = () => (step === 0 ? go(1, 'next') : close())
+  const back = () => step === 1 && go(0, 'back')
 
-  const row = (icon: ReactNode, name: string, what: string) => (
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+      else if (e.key === 'Enter' || e.key === 'ArrowRight') next()
+      else if (e.key === 'ArrowLeft') back()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  // a name, then a line for each thing it does
+  const row = (icon: ReactNode, name: string, ...what: string[]) => (
     <li>
       <span className="help-icon">{icon}</span>
       <span>
-        <b>{name}</b> {what}
+        <b>{name}</b>
+        {what.map((l) => (
+          <span className="guide-line" key={l}>
+            {l}
+          </span>
+        ))}
       </span>
     </li>
   )
 
   return (
-    <div className={`help${hidden ? ' is-hidden' : ''}${open ? ' is-open' : ''}`}>
-      <section className="help-card" aria-label="How it works" aria-hidden={!open}>
-        <p className="tool-panel-title">how it works</p>
-        <ul>
-          {row(<img src={note} alt="" className="help-note" />, 'notes', 'click to stick one on, then click it on the fridge to write your recipe.')}
-          {row(<img src={star} alt="" />, 'magnets', 'click to add one, or hover to pick a shape and colour.')}
-          {row(<TrashIcon />, 'trash', 'drag a magnet or note onto it to throw it away.')}
-          {row(<FridgeIcon />, 'your fridge', 'click a bare spot on it to change its style and colour.')}
-          {row(<MoveIcon />, 'look around', 'drag to turn, scroll to zoom, hold space and drag to slide.')}
-          {row(<ShareIcon />, 'share', 'save a picture, or copy a link to your fridge. clear all empties it.')}
-        </ul>
-        <button className="help-done" onClick={close} tabIndex={open ? 0 : -1}>
-          got it
+    <>
+      <div className={`guide${open ? ' is-open' : ''}`} onClick={next} aria-hidden={!open}>
+        <section
+          className={`guide-card is-${enter}`}
+          key={page}
+          // clicks on the card itself stay on it; only clicking around it moves on
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label={page === 1 ? "what's on the fridge" : 'getting around'}
+        >
+          {page === 1 ? (
+            <>
+              <p className="tool-panel-title">what's on the fridge</p>
+              <ul className="guide-list">
+                {row(<FridgeIcon />, 'fridge', 'click to change the color and style!')}
+                {row(<img src={note} alt="" className="help-note" />, 'notes', 'click/drag from the menu to attach to the fridge!', 'click again to write your recipes.')}
+                {row(<img src={star} alt="" />, 'magnets', 'click/drag from the menu to attach to the fridge!')}
+                {row(<TrashIcon />, 'trash', 'drag an item to the trash to delete it.', 'double click to clear all.')}
+                {row(<ShareIcon />, 'share', 'save a picture, or copy a link to your fridge.')}
+                {row(<EyeIcon />, 'reset view', 'glide back to the front of the fridge.')}
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="tool-panel-title">getting around</p>
+              <div className="guide-controls">
+                <Control mouse="left" move="turn" name="left click + drag" what="turn the fridge" />
+                <Control mouse="wheel" move="scroll" name="scroll" what="zoom in and out" />
+                <Control mouse="right" move="slide" name="right click + drag" what="slide around (or hold space and drag)" />
+              </div>
+            </>
+          )}
+          <div className="guide-foot">
+            <span className="guide-dots" aria-label={`step ${page + 1} of 2`}>
+              <i className={page === 0 ? 'is-on' : ''} />
+              <i className={page === 1 ? 'is-on' : ''} />
+            </span>
+            <span className="guide-buttons">
+              {page === 1 && (
+                <button
+                  className="help-done guide-back"
+                  tabIndex={open ? 0 : -1}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    back()
+                  }}
+                >
+                  back
+                </button>
+              )}
+              <button
+                className="help-done"
+                tabIndex={open ? 0 : -1}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  next()
+                }}
+              >
+                {page === 1 ? 'got it' : 'next'}
+              </button>
+            </span>
+          </div>
+        </section>
+      </div>
+      <div className={`help${hidden || open ? ' is-hidden' : ''}`}>
+        <button className="help-btn" onClick={() => go(0, 'open')} aria-label="How it works" tabIndex={open ? -1 : 0}>
+          ?
         </button>
-      </section>
-      <button className="help-btn" onClick={() => setOpen(true)} aria-label="How it works" tabIndex={open ? -1 : 0}>
-        ?
-      </button>
+      </div>
+    </>
+  )
+}
+
+/** One mouse control: a mouse with the part you use lit up, gently acting it out */
+function Control({ mouse, move, name, what }: { mouse: 'left' | 'right' | 'wheel'; move: 'turn' | 'slide' | 'scroll'; name: string; what: string }) {
+  return (
+    <div className="guide-control">
+      <div className={`guide-mouse is-${move}`}>
+        <svg viewBox="0 0 64 72" aria-hidden="true">
+          <Defs />
+          <defs>
+            {/* one tidy chevron, turned to follow whichever way its line runs */}
+            <marker id="guide-head" viewBox="0 0 8 8" refX="5.5" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+              <path className="guide-arrow" d="M2 1.2L5.5 4L2 6.8" />
+            </marker>
+          </defs>
+          {move === 'turn' && <path className="guide-arrow" d="M17 59Q32 67 47 59" markerStart="url(#guide-head)" markerEnd="url(#guide-head)" />}
+          {move === 'slide' && <path className="guide-arrow" d="M14 64H50" markerStart="url(#guide-head)" markerEnd="url(#guide-head)" />}
+          {move === 'scroll' && <path className="guide-arrow" d="M57 18V38" markerStart="url(#guide-head)" markerEnd="url(#guide-head)" />}
+          <g className="guide-body">
+            <rect x="16" y="6" width="32" height="46" rx="16" {...glass} />
+            {mouse === 'left' && <path className="guide-lit" d="M32 6a16 16 0 0 0-16 16v2h16z" />}
+            {mouse === 'right' && <path className="guide-lit" d="M32 6a16 16 0 0 1 16 16v2h-16z" />}
+            <path d="M16 24h32M32 6v18" {...line} strokeWidth={1.2} />
+            <rect className={mouse === 'wheel' ? 'guide-lit guide-wheel' : ''} x="29.5" y="10" width="5" height="9" rx="2.5" {...(mouse === 'wheel' ? {} : line)} strokeWidth={1.2} />
+          </g>
+        </svg>
+      </div>
+      <b>{name}</b>
+      <span>{what}</span>
     </div>
   )
 }
@@ -107,13 +222,13 @@ function FridgeIcon() {
   )
 }
 
-function MoveIcon() {
+function EyeIcon() {
   return (
     <svg viewBox="6.5 6.5 19 19">
       <Defs />
-      <circle cx="16" cy="16" r="7.5" {...glass} />
-      <path d="M8.5 16h15M16 8.5v15" {...line} strokeWidth={1.2} />
-      <ellipse cx="16" cy="16" rx="3.2" ry="7.5" {...line} strokeWidth={1.2} />
+      <path d="M8.2 16c2-3.6 4.7-5.4 7.8-5.4s5.8 1.8 7.8 5.4c-2 3.6-4.7 5.4-7.8 5.4s-5.8-1.8-7.8-5.4z" {...glass} />
+      <circle cx="16" cy="16" r="2.6" {...line} />
+      <circle cx="16" cy="16" r="0.9" fill="#7d828a" />
     </svg>
   )
 }

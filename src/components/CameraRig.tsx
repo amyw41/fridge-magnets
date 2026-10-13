@@ -211,6 +211,7 @@ export default function CameraRig({
   startAtIntro = false,
   introPose = null,
   revealed = true,
+  onAwayChange,
 }: {
   resetSignal: number
   onGlideChange: (gliding: boolean) => void
@@ -220,7 +221,11 @@ export default function CameraRig({
   introPose?: { position: THREE.Vector3; target: THREE.Vector3 } | null
   /** False while the loading curtain is up: the intro camera waits at its load-in start pose */
   revealed?: boolean
+  /** Told whenever the camera leaves or settles back on the front view (so "reset view" knows when it's needed) */
+  onAwayChange?: (away: boolean) => void
 }) {
+  const away = useRef(false)
+  const homeNow = useMemo(() => new THREE.Vector3(), [])
   const entrance = useRef(0) // load-in progress, 0 → 1
   const reduceMotion = useMemo(prefersReducedMotion, [])
   const camera = useThree((s) => s.camera)
@@ -323,6 +328,14 @@ export default function CameraRig({
       }
     }
     constrain(camera, controls, lastValid, gliding)
+    // away from the front view? (a glide counts as on its way back)
+    fitHome()
+    homeNow.setFromSpherical(HOME).add(homeTarget)
+    const isAway = !gliding && (camera.position.distanceTo(homeNow) > 0.05 || controls.target.distanceTo(homeTarget) > 0.05)
+    if (isAway !== away.current) {
+      away.current = isAway
+      onAwayChange?.(isAway)
+    }
   })
 
   return null
