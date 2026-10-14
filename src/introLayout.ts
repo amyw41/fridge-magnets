@@ -21,7 +21,7 @@ export const INTRO_LAYOUT = {
     fridgeOfWidth: 0.3,
     fridgeOfHeight: 0.48,
     /** Space between title and fridge, as a fraction of window width */
-    gap: 0.05,
+    gap: 0.09,
     /** Fridge top, as a fraction of window height from the top */
     fridgeTop: 0.17,
     /** Title top, relative to the fridge top (fraction of window height) */

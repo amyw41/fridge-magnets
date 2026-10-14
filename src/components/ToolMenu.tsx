@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { magnetThumb } from '../magnetThumbs'
 import type { MagnetFinish, MagnetShape } from '../magnetLayout'
 import { MAGNET_SIZE } from '../magnetLayout'
 import { PALETTE, PRECIOUS, SILVER } from '../palette'
 import { PAPER_STYLES, paperThumb, PAPERS, type PaperKind, type PaperStyleId } from '../papers'
+import { prefersReducedMotion } from '../motion'
 
 export interface MagnetPreset {
   shape: MagnetShape
@@ -266,7 +267,7 @@ export default function ToolMenu({
         paperPreview === null ? (
           <span className="icon-paper" />
         ) : (
-          <img className="icon-preview" src={paperThumbs[paperPreview]} alt="" draggable={false} />
+          <Bloom className="icon-preview" src={paperThumbs[paperPreview]} />
         ),
         <>
         <Swatches colors={PAPER_STYLES} value={paperStyle} onChange={(i) => i !== null && setPaperStyle(i)} onPreview={setPaperHover} label="paper" />
@@ -281,17 +282,12 @@ export default function ToolMenu({
               onPointerDown={startPress('paper', i)}
               onKeyDown={onKey(() => onAddPaper(p.kind, style))}
             >
-              <img
-                // keyed on the picked colour (not a hovered one), so picking a
-                // colour deals the sheets in again while hovering just recolours them
-                key={style}
+              <Bloom
                 className="paper-thumb"
                 src={paperThumbs[i]}
-                alt=""
-                draggable={false}
                 // dealt in once it has actually drawn, not while it's still blank
                 // (an image that's already there never fires load, so check that first)
-                ref={dealIn}
+                imgRef={dealIn}
                 style={{ ['--tilt' as string]: `${i % 2 ? 2 : -2}deg`, ['--i' as string]: i }}
               />
             </button>
@@ -307,7 +303,7 @@ export default function ToolMenu({
         magnetPreview === null ? (
           <span className="icon-magnet" />
         ) : (
-          <img className="icon-magnet-preview" src={magnetThumbs[magnetPreview]} alt="" draggable={false} />
+          <Bloom className="icon-magnet-preview" src={magnetThumbs[magnetPreview]} />
         ),
         <>
         <Swatches colors={MAGNET_COLORS} value={magnetColor} onChange={(i) => i !== null && setMagnetColor(i)} onPreview={setMagnetHover} />
@@ -324,7 +320,7 @@ export default function ToolMenu({
                 onPointerDown={startPress('magnet', i)}
                 onKeyDown={onKey(() => onAddMagnet(preset))}
               >
-                <img className="magnet-thumb" src={magnetThumbs[i]} alt="" draggable={false} />
+                <Bloom className="magnet-thumb" src={magnetThumbs[i]} />
               </button>
             )
           })}
@@ -412,4 +408,64 @@ export default function ToolMenu({
         )}
     </nav>
   )
+}
+
+/**
+ * A thumbnail that, when its picture changes (hovering or picking another
+ * colour or style), lets the new one spread out from the middle over the old
+ * one with a soft gradient edge instead of swapping in one go.
+ *
+ * Each new picture is its own layer that blooms in over the ones below, so
+ * sweeping quickly across colours chains the spreads instead of cutting them
+ * off; once a layer has covered the tile, everything under it goes. The spread
+ * is a soft-edged circle (a fixed mask) scaled up from nothing, with the
+ * picture inside scaled down by the same amount so it stays put. Only scaling
+ * is animated, which the browser can do off the main thread, so it stays smooth
+ * even while the 3D fridge is busy.
+ */
+function Bloom({ src, className, style, imgRef }: { src: string; className: string; style?: CSSProperties; imgRef?: (el: HTMLImageElement | null) => void }) {
+  const [layers, setLayers] = useState(() => [{ id: 0, src, blooming: false }])
+  const nextId = useRef(1)
+  useLayoutEffect(() => {
+    setLayers((ls) => {
+      if (ls[ls.length - 1].src === src) return ls
+      if (prefersReducedMotion()) return [{ id: ls[0].id, src, blooming: false }]
+      return [...ls.slice(-4), { id: nextId.current++, src, blooming: true }]
+    })
+  }, [src])
+  const settle = (id: number) => setLayers((ls) => ls.slice(ls.findIndex((l) => l.id === id)).map((l) => (l.id === id ? { ...l, blooming: false } : l)))
+  return (
+    <span className="bloom">
+      {layers.map((l) => (
+        <span key={l.id} className={`bloom-layer${l.blooming ? ' is-blooming' : ''}`} ref={l.blooming ? (el) => { if (el) spread(el, () => settle(l.id)) } : undefined}>
+          <span className="bloom-inner">
+            {/* (only the first picture gets the ref: it's the one dealt in when the panel opens) */}
+            <img className={className} src={l.src} style={style} alt="" draggable={false} ref={l.id === 0 ? imgRef : undefined} />
+          </span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** Big enough that the soft circle's solid middle covers the tile's corners */
+const SPREAD_TO = 2.6
+const SPREAD_MS = 750
+
+function spread(layer: HTMLElement, done: () => void) {
+  if (layer.dataset.spread) return // (ref callbacks run again on every render)
+  layer.dataset.spread = '1'
+  const inner = layer.firstElementChild as HTMLElement
+  const grow: Keyframe[] = []
+  const hold: Keyframe[] = []
+  for (let k = 0; k <= 20; k++) {
+    const t = k / 20
+    // ease-out; starts as a small dot rather than nothing, so the picture inside is never blown up huge
+    const s = 0.12 + (1 - Math.pow(1 - t, 2)) * (SPREAD_TO - 0.12)
+    grow.push({ transform: `scale(${s})` })
+    hold.push({ transform: `scale(${1 / s})` })
+  }
+  const timing = { duration: SPREAD_MS, easing: 'linear' }
+  layer.animate(grow, timing).onfinish = done
+  inner.animate(hold, timing)
 }
