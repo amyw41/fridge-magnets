@@ -1374,52 +1374,40 @@ body {
 .fridge-menu,
 .tool-panel,
 .share-menu {
-  /* width and height run as two overlapping animations: the height starts a
-     quarter of the way into the width, so it opens wide first, then both together */
+  /* Width and height run as two overlapping springs: the height starts a
+     quarter of the way into the width, so it opens wide first, then both
+     together. A spring does most of its moving in the first third and then
+     just settles, which is why iOS feels quick; --spring is Apple's
+     spring(duration: 0.38, bounce: 0.26) sampled as a linear() curve. */
+  --spring: linear(0, 0.033, 0.115, 0.224, 0.345, 0.466, 0.58, 0.681, 0.768, 0.841, 0.899, 0.944, 0.977, 1.001, 1.016, 1.026, 1.03, 1.032, 1.03, 1.028, 1.024, 1.02, 1.017, 1.013, 1.01, 1.007, 1.005, 1.003, 1.002, 1.001, 1);
   animation:
-    liquid-x 0.42s both,
-    liquid-y 0.34s 0.1s both;
+    liquid-x 0.5s var(--spring) both,
+    liquid-y 0.5s 0.06s var(--spring) both,
+    liquid-in 0.1s linear both;
 }
 
 .fridge-menu > *,
 .tool-panel > *,
 .share-menu > * {
-  animation: liquid-content 0.18s ease-out 0.3s backwards;
+  animation: liquid-content 0.14s ease-out 0.14s backwards;
 }
 
 @keyframes liquid-x {
-  0% {
-    opacity: 0;
-    scale: 0.14 1;
-    animation-timing-function: cubic-bezier(0.3, 0.75, 0.4, 1);
-  }
-  15% {
-    opacity: 1;
-  }
-  60% {
-    scale: 1.04 1;
-    animation-timing-function: ease-in-out;
-  }
-  100% {
-    scale: 1 1;
+  from {
+    scale: 0.2 1;
   }
 }
 
 /* (transform, not scale, so it doesn't fight liquid-x) */
 @keyframes liquid-y {
-  0% {
-    transform: scaleY(0.12);
-    animation-timing-function: cubic-bezier(0.3, 0.75, 0.4, 1);
+  from {
+    transform: scaleY(0.14);
   }
-  65% {
-    transform: scaleY(1.04);
-    animation-timing-function: ease-in-out;
-  }
-  85% {
-    transform: scaleY(0.99);
-  }
-  100% {
-    transform: scaleY(1);
+}
+
+@keyframes liquid-in {
+  from {
+    opacity: 0;
   }
 }
 
