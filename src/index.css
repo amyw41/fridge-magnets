@@ -119,11 +119,13 @@ body {
 }
 
 /* ---------- Load-in ---------- */
-/* White curtain over everything until the scene and fonts are ready */
+/* White curtain over the fridge until the scene has drawn. It sits under the
+   intro title, so the title rises in straight away and the fridge fades in
+   beside it once it's ready. */
 .loader {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 4;
   display: grid;
   place-items: center;
   background: #ffffff;
@@ -199,7 +201,8 @@ body {
   translate: 0 0.3em;
 }
 
-.intro.is-loading .scroll-hint {
+.intro.is-loading .scroll-hint,
+.intro.is-waiting .scroll-hint {
   opacity: 0;
 }
 
@@ -1362,46 +1365,68 @@ body {
 
 /*
  * Liquid glass pop-ups (the fridge menu, the sidebar panels, share): like iOS,
- * each one swells out of where it came from as a round glass drop, overshoots
- * and wobbles into its shape, and only then do its contents fade in. The glass
- * itself is brighter and clearer than the plain frost, with a lit top edge.
+ * each one starts as a small glass drop where it came from, stretches out
+ * sideways, and a beat later grows to its full height too, then wobbles
+ * still. Its contents stay hidden until the glass has opened, so nothing is
+ * squashed along with it. The glass itself is brighter and clearer than the
+ * plain frost, with a lit top edge.
  */
 .fridge-menu,
 .tool-panel,
 .share-menu {
-  animation: liquid-pop 0.6s cubic-bezier(0.22, 0.9, 0.3, 1) both;
+  /* width and height run as two overlapping animations: the height starts a
+     quarter of the way into the width, so it opens wide first, then both together */
+  animation:
+    liquid-x 0.42s both,
+    liquid-y 0.34s 0.1s both;
 }
 
 .fridge-menu > *,
 .tool-panel > *,
 .share-menu > * {
-  animation: liquid-content 0.32s ease-out 0.14s backwards;
+  animation: liquid-content 0.18s ease-out 0.3s backwards;
 }
 
-@keyframes liquid-pop {
+@keyframes liquid-x {
   0% {
     opacity: 0;
-    transform: scale(0.18);
-    border-radius: 999px;
+    scale: 0.14 1;
+    animation-timing-function: cubic-bezier(0.3, 0.75, 0.4, 1);
   }
-  30% {
+  15% {
     opacity: 1;
   }
-  55% {
-    transform: scale(1.035, 0.97);
-  }
-  78% {
-    transform: scale(0.99, 1.012);
+  60% {
+    scale: 1.04 1;
+    animation-timing-function: ease-in-out;
   }
   100% {
-    transform: scale(1);
+    scale: 1 1;
+  }
+}
+
+/* (transform, not scale, so it doesn't fight liquid-x) */
+@keyframes liquid-y {
+  0% {
+    transform: scaleY(0.12);
+    animation-timing-function: cubic-bezier(0.3, 0.75, 0.4, 1);
+  }
+  65% {
+    transform: scaleY(1.04);
+    animation-timing-function: ease-in-out;
+  }
+  85% {
+    transform: scaleY(0.99);
+  }
+  100% {
+    transform: scaleY(1);
   }
 }
 
 @keyframes liquid-content {
   from {
     opacity: 0;
-    transform: scale(0.97);
+    filter: blur(3px);
   }
 }
 

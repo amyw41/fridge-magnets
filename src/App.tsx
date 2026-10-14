@@ -9,7 +9,6 @@ import HelpCard from './components/HelpCard'
 import RecipeEditor from './components/RecipeEditor'
 import FridgeMenu from './components/FridgeMenu'
 import GlossyFloor from './components/GlossyFloor'
-import LoaderStar from './components/LoaderStar'
 import Magnet from './components/Magnet'
 import PaperNote, { type PaperData } from './components/PaperNote'
 import StaticShadows from './components/StaticShadows'
@@ -115,7 +114,9 @@ export default function App() {
     return () => window.removeEventListener('resize', update)
   }, [intro])
 
-  const ready = sceneDrawn && fontsReady && introPose !== null
+  // the title only needs its font and its spot; the fridge waits for the scene too
+  const titleReady = fontsReady && introPose !== null
+  const ready = sceneDrawn && titleReady
   useEffect(() => {
     if (!ready || !loadIn.current) return
     const n = loadIn.current.size
@@ -380,13 +381,11 @@ export default function App() {
           onAwayChange={setAwayFromFront}
         />
       </Canvas>
-      {/* Load-in curtain; the silver star only shows if loading takes a moment */}
-      <div className={`loader${ready ? ' is-done' : ''}`} role="status" aria-label={ready ? undefined : 'Loading'}>
-        <LoaderStar />
-      </div>
+      {/* Load-in curtain over the fridge only: the title shows on it straight away */}
+      <div className={`loader${ready ? ' is-done' : ''}`} role="status" aria-label={ready ? undefined : 'Loading'} />
       {/* Intro overlay: sits above the canvas so the first gesture starts the app */}
       <div
-        className={`intro${intro ? '' : ' is-gone'}${ready ? '' : ' is-loading'}`}
+        className={`intro${intro ? '' : ' is-gone'}${titleReady ? '' : ' is-loading'}${ready ? '' : ' is-waiting'}`}
         onClick={start}
         onWheel={start}
         onTouchMove={start}
