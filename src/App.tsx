@@ -336,6 +336,7 @@ export default function App() {
             onFloor={handlePaperFloor}
             onTrash={(id) => setPapers((ps) => ps.filter((q) => q.id !== id))}
             onOpen={setWriting}
+            justPlaced={ready} // (anything arriving after the load-in was just put on)
           />
         ))}
         {magnets.map((m) => {
@@ -351,6 +352,7 @@ export default function App() {
               onFloor={handleFloor}
               onTrash={(id) => setMagnets((ms) => ms.filter((q) => q.id !== id))}
               appearDelay={ready ? delay : null}
+              justPlaced={ready}
             />
           )
         })}

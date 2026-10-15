@@ -1543,10 +1543,11 @@ body {
   transition: transform 0.2s ease;
 }
 
-/* Hovering or picking another colour or style: the new picture spreads out
-   from the middle over the old one, with a soft gradient edge (see Bloom in
-   ToolMenu.tsx) */
+/* Hovering or picking another colour or style: the new picture sweeps in
+   across the old at a slant, with a glossy highlight on its leading edge (see
+   Bloom in ToolMenu.tsx) */
 .bloom {
+  position: relative;
   display: grid;
   place-items: center;
 }
@@ -1555,20 +1556,81 @@ body {
   grid-area: 1 / 1;
 }
 
+/* each picture's soft shadow, drawn once around the whole stack */
+.bloom.for-magnet-thumb {
+  filter: drop-shadow(0 3px 4px rgba(40, 20, 30, 0.22));
+}
+
+.bloom.for-paper-thumb {
+  filter: drop-shadow(0 2px 3px rgba(40, 20, 30, 0.18));
+}
+
+.bloom.for-icon-magnet-preview {
+  filter: drop-shadow(0 1px 2px rgba(40, 20, 30, 0.25));
+}
+
+.bloom.for-icon-preview {
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.15));
+}
+
 .bloom-layer,
 .bloom-inner {
   display: grid;
   place-items: center;
-  /* while it's scaled up the layer reaches over the swatches above it; it
-     mustn't catch the pointer there, or it un-hovers the colour being shown */
+  /* while it slides across the layer reaches over the pictures beside it; it
+     mustn't catch the pointer there, or it un-hovers what's being shown */
   pointer-events: none;
 }
 
-/* a soft-edged circle; Bloom scales it up from nothing (and the picture inside
-   down by the same amount), so it reads as the colour spreading outward */
+.bloom-inner > * {
+  grid-area: 1 / 1;
+}
+
+.is-blooming > .bloom-inner {
+  place-self: start;
+  margin-left: 25%;
+  width: 25%;
+  height: 100%;
+}
+
+/* Four pictures wide with the picture in the second quarter: solid, then a
+   soft slanted edge, then clear. Bloom slides it across (and the picture inside
+   back the other way, so it stays put). The solid part reaches a whole picture
+   to the left so it still covers everything once the edge has gone past. It
+   floats over the stack so its width doesn't push the panel around. */
 .bloom-layer.is-blooming {
-  -webkit-mask-image: radial-gradient(circle farthest-corner, #000 35%, transparent 100%);
-  mask-image: radial-gradient(circle farthest-corner, #000 35%, transparent 100%);
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 400%;
+  height: 100%;
+  -webkit-mask-image: linear-gradient(100deg, #000 47%, transparent 55%);
+  mask-image: linear-gradient(100deg, #000 47%, transparent 55%);
+}
+
+/* the gloss: a faint white streak on the new colour just behind the edge, cut
+   to the picture's shape */
+.bloom-shine {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  rotate: var(--tilt, 0deg);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.bloom-shine i {
+  position: absolute;
+  top: -10%;
+  left: 0;
+  width: 35%;
+  height: 120%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4) 50%, transparent);
 }
 
 /* a picture that arrives mid-hover jumps straight to the hover zoom instead of

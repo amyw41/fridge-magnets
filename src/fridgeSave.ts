@@ -54,6 +54,9 @@ function recipe(p: Record<string, unknown>): Recipe {
   }
 }
 const hex = (c: unknown) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)
+/** Palette colours that have since been adjusted, so saves made before still match the menu */
+const RETUNED: Record<string, string> = { '#f7e1a0': '#ffdd80', '#f9dca2': '#ffdd80', '#ffe592': '#ffdd80' } // butter, made a brighter light yellow
+const retuned = (c: string) => RETUNED[c.toLowerCase()] ?? c
 
 /** Only takes what it recognises, so an old or broken save can't break the app */
 function check(raw: unknown): SavedFridge | null {
@@ -72,8 +75,8 @@ function check(raw: unknown): SavedFridge | null {
       p && PAPERS.some((d) => d.kind === p.kind) && PAPER_STYLES.some((s) => s.id === p.style) && spot(p.position) && num(p.tilt),
   )
   return {
-    look: { model: l.model, color: l.color },
-    magnets: ms.map((m, i) => ({ id: i + 1, shape: m.shape, color: m.color, finish: m.finish, position: m.position, ...onFloor(m) })),
+    look: { model: l.model, color: retuned(l.color) },
+    magnets: ms.map((m, i) => ({ id: i + 1, shape: m.shape, color: retuned(m.color), finish: m.finish, position: m.position, ...onFloor(m) })),
     papers: ps.map((p, i) => ({
       id: i + 1,
       kind: p.kind,

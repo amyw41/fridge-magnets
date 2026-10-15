@@ -350,6 +350,7 @@ export default function Magnet({
   onFloor,
   onTrash,
   appearDelay = 0,
+  justPlaced = false,
 }: {
   data: MagnetData
   onDragChange: (dragging: boolean) => void
@@ -360,8 +361,10 @@ export default function Magnet({
   onTrash: (id: number) => void
   /** Seconds to wait before snapping onto the door; null keeps it hidden (e.g. while loading) */
   appearDelay?: number | null
+  /** Just put on from the menu: already there (no pop), lifted, and settles down, as when let go after moving it */
+  justPlaced?: boolean
 }) {
-  const appearClock = useRef(0)
+  const appearClock = useRef(justPlaced ? Infinity : 0)
   const reduceMotion = useMemo(prefersReducedMotion, [])
   const ref = useRef<THREE.Group>(null!)
   const shadowRef = useRef<THREE.Mesh>(null!)
@@ -383,7 +386,7 @@ export default function Magnet({
   const off = useRef(REST_OFF)
   const grabOffset = useRef(new THREE.Vector2()) // magnet centre minus grab point, in [s, y]
   const grabDz = useRef(0) // grab point's height above the magnet centre
-  const lift = useRef(0) // 0 = flat on door, 1 = fully lifted
+  const lift = useRef(justPlaced ? 1 : 0) // 0 = flat on door, 1 = fully lifted
   const rip = useMemo(() => new Rip(), []) // pulled off the fridge: clings, then tears free
   const stuckQ = useMemo(() => new THREE.Quaternion(), [])
   const euler = useMemo(() => new THREE.Euler(), [])

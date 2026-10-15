@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { magnetThumb } from '../magnetThumbs'
 import type { MagnetFinish, MagnetShape } from '../magnetLayout'
 import { MAGNET_SIZE } from '../magnetLayout'
@@ -146,6 +146,30 @@ export default function ToolMenu({
     () => MAGNET_SHAPES.map((_, i) => { const p = presetOf(i, shownMagnetColor); return magnetThumb(p.shape, p.color, p.finish) }),
     [shownMagnetColor],
   )
+  // Draw every colour's and style's pictures ahead of time while the page is
+  // idle, so hovering a dot changes the previews straight away instead of
+  // stalling while that colour is drawn for the first time
+  useEffect(() => {
+    let cancelled = false
+    const jobs = [
+      ...PAPER_STYLES.flatMap((s) => PAPERS.map((p) => () => paperThumb(p.kind, s.id))),
+      ...MAGNET_COLORS.flatMap((_, c) => MAGNET_SHAPES.map((_, i) => () => { const p = presetOf(i, c); return magnetThumb(p.shape, p.color, p.finish) })),
+    ]
+    const idle = (f: () => void) => (typeof requestIdleCallback === 'function' ? requestIdleCallback(f, { timeout: 300 }) : setTimeout(f, 30)) // (Safari has no idle callbacks)
+    const next = () => {
+      if (cancelled) return
+      const job = jobs.shift()
+      if (!job) return
+      const src = job()
+      if (src) warm(src)
+      idle(next)
+    }
+    const start = window.setTimeout(() => idle(next), 3000) // (after the page has loaded in, so it doesn't slow that down)
+    return () => {
+      cancelled = true
+      window.clearTimeout(start)
+    }
+  }, [])
   const style = PAPER_STYLES[paperStyle].id
   const shownStyle = PAPER_STYLES[paperHover ?? paperStyle].id
   const dealIn = (el: HTMLImageElement | null) => {
@@ -267,7 +291,7 @@ export default function ToolMenu({
         paperPreview === null ? (
           <span className="icon-paper" />
         ) : (
-          <Bloom className="icon-preview" src={paperThumbs[paperPreview]} />
+          <Bloom className="icon-preview" src={paperThumbs[paperPreview]} swapKey={paperPreview} />
         ),
         <>
         <Swatches colors={PAPER_STYLES} value={paperStyle} onChange={(i) => i !== null && setPaperStyle(i)} onPreview={setPaperHover} label="paper" />
@@ -303,7 +327,7 @@ export default function ToolMenu({
         magnetPreview === null ? (
           <span className="icon-magnet" />
         ) : (
-          <Bloom className="icon-magnet-preview" src={magnetThumbs[magnetPreview]} />
+          <Bloom className="icon-magnet-preview" src={magnetThumbs[magnetPreview]} swapKey={magnetPreview} />
         ),
         <>
         <Swatches colors={MAGNET_COLORS} value={magnetColor} onChange={(i) => i !== null && setMagnetColor(i)} onPreview={setMagnetHover} />
@@ -412,35 +436,61 @@ export default function ToolMenu({
 
 /**
  * A thumbnail that, when its picture changes (hovering or picking another
- * colour or style), lets the new one spread out from the middle over the old
- * one with a soft gradient edge instead of swapping in one go.
+ * colour or style), sweeps the new one in across the old at a slant, with a
+ * glossy highlight riding along its leading edge, like light gliding over
+ * chrome, instead of swapping in one go.
  *
- * Each new picture is its own layer that blooms in over the ones below, so
- * sweeping quickly across colours chains the spreads instead of cutting them
- * off; once a layer has covered the tile, everything under it goes. The spread
- * is a soft-edged circle (a fixed mask) scaled up from nothing, with the
- * picture inside scaled down by the same amount so it stays put. Only scaling
- * is animated, which the browser can do off the main thread, so it stays smooth
- * even while the 3D fridge is busy.
+ * Each new picture is its own layer that sweeps in over the ones below, so
+ * running quickly across colours chains the sweeps instead of cutting them
+ * off; once a layer has covered the tile, everything under it goes. The wipe
+ * is a soft-edged slanted mask slid across, with the picture inside slid back
+ * by the same amount so it stays put. Only sliding is animated, which the
+ * browser can do off the main thread, so it stays smooth even while the 3D
+ * fridge is busy.
+ *
+ * A change of `swapKey` (the sidebar button showing a different shape or note,
+ * not a new colour) swaps straight away, so the button keeps up with the pointer.
  */
-function Bloom({ src, className, style, imgRef }: { src: string; className: string; style?: CSSProperties; imgRef?: (el: HTMLImageElement | null) => void }) {
+function Bloom({
+  src,
+  className,
+  style,
+  imgRef,
+  swapKey,
+}: {
+  src: string
+  className: string
+  style?: CSSProperties
+  imgRef?: (el: HTMLImageElement | null) => void
+  swapKey?: number
+}) {
   const [layers, setLayers] = useState(() => [{ id: 0, src, blooming: false }])
   const nextId = useRef(1)
+  const lastKey = useRef(swapKey)
   useLayoutEffect(() => {
+    const swapped = lastKey.current !== swapKey
+    lastKey.current = swapKey
     setLayers((ls) => {
       if (ls[ls.length - 1].src === src) return ls
-      if (prefersReducedMotion()) return [{ id: ls[0].id, src, blooming: false }]
+      if (swapped || prefersReducedMotion()) return [{ id: ls[0].id, src, blooming: false }]
       return [...ls.slice(-4), { id: nextId.current++, src, blooming: true }]
     })
-  }, [src])
+  }, [src, swapKey])
   const settle = (id: number) => setLayers((ls) => ls.slice(ls.findIndex((l) => l.id === id)).map((l) => (l.id === id ? { ...l, blooming: false } : l)))
   return (
-    <span className="bloom">
+    // (the shadow goes on this wrapper, once, so stacked layers never double it up)
+    <span className={`bloom for-${className}`}>
       {layers.map((l) => (
         <span key={l.id} className={`bloom-layer${l.blooming ? ' is-blooming' : ''}`} ref={l.blooming ? (el) => { if (el) spread(el, () => settle(l.id)) } : undefined}>
           <span className="bloom-inner">
             {/* (only the first picture gets the ref: it's the one dealt in when the panel opens) */}
             <img className={className} src={l.src} style={style} alt="" draggable={false} ref={l.id === 0 ? imgRef : undefined} />
+            {/* the highlight, cut to the picture's own shape */}
+            {l.blooming && (
+              <span className="bloom-shine" style={{ ...style, maskImage: `url(${l.src})`, WebkitMaskImage: `url(${l.src})` }}>
+                <i />
+              </span>
+            )}
           </span>
         </span>
       ))}
@@ -448,24 +498,40 @@ function Bloom({ src, className, style, imgRef }: { src: string; className: stri
   )
 }
 
-/** Big enough that the soft circle's solid middle covers the tile's corners */
-const SPREAD_TO = 2.6
-const SPREAD_MS = 750
+/** Decodes a picture now and keeps it, so showing it later doesn't wait on decoding. */
+const warmed: HTMLImageElement[] = []
+function warm(src: string) {
+  const img = new Image()
+  img.src = src
+  img.decode().catch(() => {})
+  warmed.push(img)
+}
+
+const SWEEP_MS = 550
 
 function spread(layer: HTMLElement, done: () => void) {
   if (layer.dataset.spread) return // (ref callbacks run again on every render)
   layer.dataset.spread = '1'
   const inner = layer.firstElementChild as HTMLElement
-  const grow: Keyframe[] = []
-  const hold: Keyframe[] = []
-  for (let k = 0; k <= 20; k++) {
-    const t = k / 20
-    // ease-out; starts as a small dot rather than nothing, so the picture inside is never blown up huge
-    const s = 0.12 + (1 - Math.pow(1 - t, 2)) * (SPREAD_TO - 0.12)
-    grow.push({ transform: `scale(${s})` })
-    hold.push({ transform: `scale(${1 / s})` })
+  const shine = inner.querySelector<HTMLElement>('.bloom-shine i')
+  // The wipe's soft edge (about 0.9 to 1.2 picture widths past the picture's
+  // left side, see .bloom-layer.is-blooming, and slanted) starts fully clear of
+  // the picture and ends fully past it, slant and tilted notes included, so no
+  // sliver of the old colour is left when it settles
+  const w = inner.getBoundingClientRect().width
+  const from = -1.3 * w
+  const to = 0.35 * w
+  // (quick off the mark, so the new colour shows the moment it's hovered, then
+  // easing into place; held at the end until the settled picture is on screen:
+  // letting go first snapped the wipe back for a frame and flashed the old colour)
+  const timing = { duration: SWEEP_MS, easing: 'cubic-bezier(0.2, 0.75, 0.3, 1)', fill: 'forwards' } as const
+  const moves = [
+    layer.animate([{ transform: `translateX(${from}px)` }, { transform: `translateX(${to}px)` }], timing),
+    inner.animate([{ transform: `translateX(${-from}px)` }, { transform: `translateX(${-to}px)` }], timing),
+    shine?.animate([{ transform: `translateX(${from + 0.65 * w}px)` }, { transform: `translateX(${to + 0.65 * w}px)` }], timing), // (just behind the edge, on the new colour, and off the picture by the end)
+  ]
+  moves[0]!.onfinish = () => {
+    if (layer.isConnected) flushSync(done)
+    for (const m of moves) m?.cancel()
   }
-  const timing = { duration: SPREAD_MS, easing: 'linear' }
-  layer.animate(grow, timing).onfinish = done
-  inner.animate(hold, timing)
 }

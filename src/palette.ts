@@ -42,7 +42,7 @@ export const VIBRANTS: PaletteColor[] = [
 export const PASTELS: PaletteColor[] = [
   { label: 'coral', color: '#f6b3ab' },
   { label: 'peach', color: '#ffcfb0' },
-  { label: 'butter', color: '#f7e1a0' },
+  { label: 'butter', color: '#ffdd80' },
   { label: 'mint', color: '#a8dcc5' },
   { label: 'powder blue', color: '#a9c8ea' },
   { label: 'lilac', color: '#d5c4ef' },

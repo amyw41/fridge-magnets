@@ -139,6 +139,7 @@ export default function PaperNote({
   onFloor,
   onTrash,
   onOpen,
+  justPlaced = false,
 }: {
   data: PaperData
   /** Position in the pile: later notes lie on top */
@@ -151,6 +152,8 @@ export default function PaperNote({
   onTrash: (id: number) => void
   /** Clicked without dragging: open it to write on */
   onOpen: (id: number) => void
+  /** Just put on from the menu: starts lifted and settles down, as when let go after moving it */
+  justPlaced?: boolean
 }) {
   const [w, h] = paperDesign(data.kind).size
   const ref = useRef<THREE.Mesh>(null!)
@@ -162,13 +165,18 @@ export default function PaperNote({
     const map = new THREE.CanvasTexture(paperCanvas(data.kind, data.style))
     map.colorSpace = THREE.SRGBColorSpace
     map.anisotropy = gl.capabilities.getMaxAnisotropy()
-    // a little self-glow from its own colours, so white paper reads white under the studio light
+    // Mostly its own colours, glowing, with just a little of the studio light on
+    // top for shape, and left out of the scene's tone mapping (which greyed
+    // and dulled it), so a note looks on the fridge as it did in the menu and
+    // while being dragged
     return new THREE.MeshStandardMaterial({
       map,
+      color: new THREE.Color(0.22, 0.22, 0.22),
       emissive: '#ffffff',
       emissiveMap: map,
-      emissiveIntensity: 0.35,
+      emissiveIntensity: 0.85,
       roughness: 0.92,
+      toneMapped: false,
       transparent: true,
       depthWrite: false,
     })
@@ -210,7 +218,7 @@ export default function PaperNote({
   const at = useRef({ s: data.position[0], y: data.position[1] })
   const off = useRef(REST_OFF)
   const grabOffset = useRef(new THREE.Vector2())
-  const lift = useRef(0)
+  const lift = useRef(justPlaced ? 1 : 0)
   const camera = useThree((s) => s.camera)
   const rip = useMemo(() => new PaperRip(), []) // pulled off the fridge: peels, then tears free
   const downAt = useRef({ x: 0, y: 0 })
